@@ -1,6 +1,8 @@
 import chisel3._
 import chiseltest._
+
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 package object core {
 
   val defaultConf = Config(debug=true)
@@ -19,11 +21,23 @@ package object core {
       clock.step()
     }
     timescope {
-      val addr = imem.addr.peekInt
+      val addr = imem.addr.peekInt()
       val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM)
       imem.data.poke(instrs.getOrElse(addr.toInt, nop).toUInt)
       imem.ack.poke(true.B)
       clock.step()
+    }
+  }
+
+  /**
+   * Generates instructions to load random values into registers x1-x15
+   * @param lb
+   */
+  def loadFirst15(lb: ListBuffer[Instruction]): Unit = {
+    val MAX_12BIT = math.pow(2,12).toInt
+    def r = scala.util.Random.nextInt(MAX_12BIT) - MAX_12BIT/2
+    for(i <- 1 until 16) {
+      lb += ItypeInstruction(r, 0, i, Funct3.ADDI, Opcode.OP_IMM)
     }
   }
 
@@ -44,8 +58,10 @@ package object core {
   }
 
   def expectReg(dut: Core, i: Int, v: Int): Unit = {
-    val r = dut.io.dbg.get.reg(i)
-    val x = if (v < 0) math.pow(2, r.getWidth).toLong+v else v
-    r.expect(x)
+    expectReg(dut, i, v.toLong & 0xffffffffL)
+  }
+
+  def expectReg(dut: Core, i: Int, v: Long): Unit = {
+    dut.io.dbg.get.reg(i).expect(v.U)
   }
 }

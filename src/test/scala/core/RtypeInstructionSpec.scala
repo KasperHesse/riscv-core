@@ -15,48 +15,94 @@ import scala.collection.mutable.ListBuffer
 class RtypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers{
   behavior of "R-type instruction"
 
-
-  it should "calculate ADD correctly" in {
-    test(new Core()(defaultConf)).withAnnotations(Seq(WriteVcdAnnotation)) { dut =>
-      val instrs = mutable.Map[Int, Instruction]()
-      instrs.update(0, ItypeInstruction(4, 0, 1, Funct3.ADDI, Opcode.OP_IMM))
-      instrs.update(4, ItypeInstruction(8, 0, 2, Funct3.ADDI, Opcode.OP_IMM))
-      instrs.update(8, RtypeInstruction(Funct7.OTHERS, 1, 2, Funct3.ADD, 3, Opcode.OP))
-
-      testFun(dut, 20, Map.from(instrs))
-
-      dut.io.dbg.get.reg(1).expect(4)
-      dut.io.dbg.get.reg(2).expect(8)
-      dut.io.dbg.get.reg(3).expect(12)
+  /**
+   * Applies the given operator to the values in registers x(i-16) and x(i-15), placing the value
+   * into x(i).
+   * @param op
+   * @param inst
+   */
+  def operateLast15(funct7: Int, funct3: Int, inst: ListBuffer[Instruction]): Unit = {
+    for(i <- 17 until 32) {
+      inst += RtypeInstruction(funct7, i-15, i-16, funct3, i, Opcode.OP)
     }
   }
 
-  it should "calculate AND correctly" in {
-    test(new Core()(defaultConf)).withAnnotations(Seq(WriteVcdAnnotation)) { dut =>
-      val instrs = mutable.Map[Int, Instruction]()
-      instrs.update(0, ItypeInstruction(0x555, 0, 1, Funct3.ADDI, Opcode.OP_IMM))
-      instrs.update(4, ItypeInstruction(0x707, 0, 2, Funct3.ADDI, Opcode.OP_IMM))
-      instrs.update(8, RtypeInstruction(Funct7.OTHERS, 1, 2, Funct3.AND, 3, Opcode.OP))
+  def computeResults(lb: ListBuffer[Instruction], op: (Int, Int) => Int): Array[Int] = {
+    val r = Array.ofDim[Int](32)
+    for(i <- 1 until 16) {
+      r(i) = lb(i-1).asInstanceOf[ItypeInstruction].imm.litValue.toInt
+    }
+    for(i <- 17 until 32) {
+      r(i) = op(r(i-16), r(i-15))
+      println(f"x${i}, v1=${r(i-16)}, v2=${r(i-15)}, res=${r(i)}")
+    }
+    r
+  }
 
-      testFun(dut, 20, Map.from(instrs))
-
-      dut.io.dbg.get.reg(1).expect(0x555)
-      dut.io.dbg.get.reg(2).expect(0x707)
-      dut.io.dbg.get.reg(3).expect(0x505)
+  def regTestFun(funct7: Int, funct3: Int, op: (Int, Int) => Int) = {
+    val inst = mutable.ListBuffer.empty[Instruction]
+    loadFirst15(inst)
+    operateLast15(funct7, funct3, inst)
+    val r = computeResults(inst, op)
+    test(new Core()(defaultConf)).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
+      testFun(dut, iters=30, inst)
+      for(i <- 0 until 32) {
+        expectReg(dut, i, r(i))
+      }
     }
   }
 
-  it should "calculate SUB correctly" in {
-    val inst = ListBuffer.empty[Instruction]
-    inst += ItypeInstruction(4, 0, 1, Funct3.ADDI, Opcode.OP_IMM)
-    inst += ItypeInstruction(8, 0, 2, Funct3.ADDI, Opcode.OP_IMM)
-    inst += RtypeInstruction(Funct7.SUB, 2, 1, Funct3.SUB, 3, Opcode.OP)
 
-    test(new Core()(defaultConf)) {dut =>
-      testFun(dut, 20, inst)
-      expectReg(dut, 1, 4)
-      expectReg(dut, 2, 8)
-      expectReg(dut, 3, -4)
+  it should "compute ADD instructions" in {
+    regTestFun(Funct7.OTHERS, Funct3.ADD, _+_)
+  }
+
+  it should "compute SUB instructions" in {
+    regTestFun(Funct7.SUB, Funct3.SUB, _-_)
+  }
+
+
+  it should "compute SLT instructions" in {
+    def slt(x: Int, y: Int): Int = {
+      if (x < y) 1 else 0
     }
+    regTestFun(Funct7.OTHERS, Funct3.SLT, slt)
+  }
+
+  it should "compute SLTU instructions" in {
+    def sltu(x: Int, y: Int): Int = {
+      if((x < y) ^ (x < 0) ^ (y < 0)) 1 else 0
+    }
+    regTestFun(Funct7.OTHERS, Funct3.SLTU, sltu)
+  }
+
+  it should "compute XOR instructions" in {
+    regTestFun(Funct7.OTHERS, Funct3.XOR, _^_)
+  }
+
+  it should "compute OR instructions" in {
+    regTestFun(Funct7.OTHERS, Funct3.OR, _|_)
+  }
+
+  it should "compute AND instructions" in {
+    regTestFun(Funct7.OTHERS, Funct3.AND, _&_)
+  }
+
+  it should "compute SLL instructions" in {
+    regTestFun(Funct7.OTHERS, Funct3.SLL, _<<_)
+  }
+
+  it should "compute SRL instructions" in {
+    def srl(v1: Int, v2: Int): Int = {
+      v1 >>> (v2 & 0x1f)
+    }
+    regTestFun(Funct7.OTHERS, Funct3.SRL, srl)
+  }
+
+  it should "compute SRA instructions" in {
+    def sra(v1: Int, v2: Int): Int = {
+      v1 >> (v2 & 0x1f): Int
+    }
+    regTestFun(Funct7.SRA, Funct3.SRA, sra)
   }
 }

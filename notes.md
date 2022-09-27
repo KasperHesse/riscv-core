@@ -3,7 +3,16 @@ A generic RV32I core, that should later be parameterized to also support RV64 an
 General:
 - BRANCHES ARE EVALAUTED IN THE EXECUTE STAGE, requires flushing of IF and ID when taken
 - IMMEDIATES ARE GENERATED IN DECODE STAGE
--
+- Stall = keep values in the stage, but don't accept new inputs
+  - Sources of stalls:
+    - Delayed memory access in mem-stage: Stall all other stages until mem-result arrives
+    - Load-use hazard, detected in EX+MEM stages. Stall IF,ID,EX, let MEM+WB progress
+- Flush: Discard values in the stage, turning it into a NOP by resetting control signals / instruction
+  - Sources of flushes:
+    - Delayed memory access in IF stage. Keep sending NOPs while waiting for the output to arrive
+    - Branch mispredicted. When branch is evaluated in EX-stage, if mispredicted, flush IF and ID
+- Use ready/valid handshake between all stages? Make sure it's not combinationally tied all the way around
+- 
 
 # Stages
 ## core.Fetch
@@ -28,10 +37,31 @@ IO:
   - flush: input, asserted when instruction should be converted to a NOP
 
 ## riscv_core.Execute
-riscv_core.Execute stage uses a separate ALU to compute the branch/jump offset as the immediate plus the rs1 value.
-Also uses separate comparators for rs1, rs2 values to determine if branch should be taken.
-- Only requires two comparators: rs1 < rs2 and rs1 == rs2. If neither is true, rs1 > rs2. if just equal, rs2 >= rs2
-- Or perhaps more, to also implement BLTU, BGEU
+- We need 3 comparators. rs1 < rs2, rs1 == rs2, rs1 < rs2 (u)
+  - BEQ: rs1 == rs2
+  - BNE: !(rs1 == rs2)
+  - BLT: rs1 < rs2
+  - BGE: !(rs1 < rs2)
+  - BLTU: rs1 < rs2 (u)
+  - BGEU: !(rs1 < rs2 (u))
+  - DONE
+
+- Circuit that generates values that will be written into regfile
+  - Operating on rs1/rs2 or rs1/imm
+    - ADD, SUB, OR, XOR, AND, SLT, SLTU, SLL, SRL, SRA, 
+    - DONE
+  - Operating on PC and constant 4
+    - JAL, JALR
+    - We always calculate it, if ctrl.branch is set, we use that value instead of aluOut
+    - DONE
+
+
+- Circuit that generates pc_next value
+  - Operating on PC + imm
+    - JAL, all branches
+  - Operating on rs1 + imm
+    - JALR, must set LSB of result to 0
+- DONE
 
 - Control signals
   - op2src: whether the second operand comes from regfile (0) or sign-ext immediate (1)

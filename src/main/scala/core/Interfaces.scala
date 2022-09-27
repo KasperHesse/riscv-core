@@ -39,18 +39,22 @@ class DecodeExecuteIO(implicit conf: Config) extends Bundle {
   val pc = Output(UInt(conf.XLEN.W))
   /** Value to write result into if instruction requires this */
   val rd = Output(UInt(5.W))
-  /** Operation for the ALU to perform. In practice, is a concatenation of funct3 and funct7[5] */
+  /** Operation for the ALU to perform. In practice, is a concatenation of funct7[5] and funct3.
+   * The 3 LSB (funct3) also encode the branch comparison to be performed */
   val aluOp = Output(AluOp())
-//  /** Address to jump to if a branch is taken in EX stage */
-//  val branchTarget = Output(UInt(conf.XLEN.W))
+  /** Whether the value to add to the immediate when calculating branch/jump targets is the PC (0, JAL and branches),
+   * or value in rs1 (1, JALR) */
+  val pcNextSrc = Output(Bool())
   /** Control values passed on to the Execute stage */
   val ctrl = new Bundle {
     /** Write-enable in the WB stage */
     val we = Output(Bool())
     /** Whether the second operand to ALU comes from register file (1) or immediate (0) */
     val op2src = Output(Bool())
-    /** Flag indicating if this is a branch instruction which should be evaluated (1) */
+    /** Flag indicating if this is a branch instruction which should be evaluated */
     val branch = Output(Bool())
+    /** Flag indicating if this is an unconditional jump instruction that should be taken */
+    val jump = Output(Bool())
   }
 }
 

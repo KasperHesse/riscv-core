@@ -59,10 +59,14 @@ class Decode(implicit conf: Config) extends PipelineStage {
   io.ex.v2 := reg(rs2)
   io.ex.rd := rd
   io.ex.pc := io.fetch.pc
-  io.ex.aluOp := AluOp(Cat(Mux(op === Opcode.OP, funct7(5), Mux(op === Opcode.OP_IMM, funct3 === Funct3.SRA.U, 0.U)), funct3))
+  val msb = (op === Opcode.OP && funct7 === Funct7.SUB.U) |
+    (op === Opcode.OP_IMM && funct3 === Funct3.SRAI.U && funct7(5))
+  io.ex.aluOp := AluOp(Cat(msb, funct3))
+  io.ex.pcNextSrc := op === Opcode.JALR
   io.ex.ctrl.we := we
   io.ex.ctrl.op2src := op === Opcode.OP //When OP, uses (rs1,rs2) otherwise uses (rs1,imm)
   io.ex.ctrl.branch := op === Opcode.BRANCH
+  io.ex.ctrl.jump := op === Opcode.JAL || op === Opcode.JALR
 
   //Debug ports
   if(conf.debug) {
@@ -109,6 +113,6 @@ class ImmediateGenerator(implicit conf: Config) extends Module {
   if(conf.XLEN == 32) {
     io.imm := imm
   } else {
-    io.imm := Cat(-1.S(32.W).asUInt, imm)
+    io.imm := Cat(Fill(32, io.instr(31)), imm)
   }
 }
