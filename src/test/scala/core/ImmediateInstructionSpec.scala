@@ -5,9 +5,9 @@ import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.must.Matchers
 
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ListBuffer, WrappedArray}
 
-class ItypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
+class ImmediateInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
   behavior of "I-type instruction"
 
   /**
@@ -120,6 +120,37 @@ class ItypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with M
       testFun(dut, 30, inst)
       for(i <- 0 until 32) {
         expectReg(dut, i, r(i))
+      }
+    }
+  }
+
+  behavior of "U-type instruction"
+
+  it should "compute AUIPC instruction" in {
+    val inst = ListBuffer.empty[Instruction]
+    val ui = Seq.fill(30)(scala.util.Random.nextInt() << 12)
+    for(i <- 0 until 30) {
+      inst += UtypeInstruction(ui(i), i+1, Opcode.AUIPC)
+    }
+    test(new Core()(defaultConf)).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
+      testFun(dut, 40, inst)
+      for(i <- 0 until 30) {
+        println(s"Expecting ${ui(i)+4*i} for pc=${4*i} and immediate ${ui(i)} in reg x$i")
+        expectReg(dut, i+1, ui(i) + 4*i)
+      }
+    }
+  }
+
+  it should "compute LUI instructions" in {
+    val inst = ListBuffer.empty[Instruction]
+    val ui = Seq.fill(30)(scala.util.Random.nextInt() << 12)
+    for(i <- 0 until 30) {
+      inst += UtypeInstruction(ui(i), i+1, Opcode.LUI)
+    }
+    test(new Core()(defaultConf)) {dut =>
+      testFun(dut, 40, inst)
+      for(i <- 0 until 30) {
+        expectReg(dut, i+1, ui(i))
       }
     }
   }

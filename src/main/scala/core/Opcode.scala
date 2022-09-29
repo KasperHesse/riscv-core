@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.experimental.ChiselEnum
 
 object Funct3 {
-  val ADDI, JALR, BEQ, LB, SB, ADD, SUB, FENCE, ECALL, EBREAK = 0
+  val ZERO, ADDI, JALR, BEQ, LB, SB, ADD, SUB, FENCE, ECALL, EBREAK = 0
   val BNE, LH, SH, SLLI, SLL = 1
   val LW, SW, SLTI, SLT = 2
   val SLTIU, SLTU = 3

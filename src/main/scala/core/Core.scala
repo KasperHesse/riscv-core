@@ -27,7 +27,10 @@ class Core(implicit conf: Config) extends Module {
   io.dmem <> memory.io.mem
 
   //CONTROL SIGNALS NOT YET CONNECTED
-  fetch.io.ctrl := DontCare
+  fetch.io.ctrl.stall := false.B
+  fetch.io.ctrl.flush := false.B
+  fetch.io.ctrl.loadPC := execute.io.ctrl.fetch.loadPC
+  fetch.io.ctrl.newPC := execute.io.ctrl.fetch.newPC
 
   if(conf.debug) {
     io.dbg.get.reg := decode.io.dbg.get.reg

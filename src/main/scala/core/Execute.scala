@@ -41,12 +41,12 @@ class Execute(implicit conf: Config) extends PipelineStage {
   val bne = !eq && (io.id.aluOp.asUInt(2,0) === 1.U(3.W))
   val blt = lt && (io.id.aluOp.asUInt(2,0) === 4.U(3.W))
   val bge = !lt && (io.id.aluOp.asUInt(2,0) === 5.U(3.W))
-  val bltu =ltu && (io.id.aluOp.asUInt(2,0) === 2.U(3.W))
-  val bgeu = !ltu && (io.id.aluOp.asUInt(2,0) === 3.U(3.W))
+  val bltu =ltu && (io.id.aluOp.asUInt(2,0) === 6.U(3.W))
+  val bgeu = !ltu && (io.id.aluOp.asUInt(2,0) === 7.U(3.W))
 
   val loadPC = (io.id.ctrl.branch && (beq | bne | blt | bge | bltu | bgeu)) | io.id.ctrl.jump
   //We always set the LSB to 0 since JAL, branches already have 0's in the LSB and JALR requires a 0
-  val newPC = Cat((Mux(io.id.pcNextSrc, io.id.pc, io.id.v1) + io.id.imm)(conf.XLEN-1,1), 0.U(1.W))
+  val newPC = Cat((Mux(io.id.pcNextSrc, io.id.v1, io.id.pc) + io.id.imm)(conf.XLEN-1,1), 0.U(1.W))
 
 
   //ALU FOR CALCULATING REGISTER RESULTS
@@ -84,9 +84,10 @@ class Execute(implicit conf: Config) extends PipelineStage {
     is(AluOp.AND, AluOp.OR, AluOp.XOR)  { aluOut := logic}
   }
 
-  //JAL and JALR require that PC+4 is written to regfile. If branch-instruction,
-  //we is not set, and the output is discarded anyways
-  io.mem.res := Mux(io.id.ctrl.branch, io.id.pc + 4.U(conf.XLEN.W), aluOut)
+  //JAL and JALR require that PC+4 is written to regfile.
+  //AUIPC requires that we add imm to PC
+  //LUI requires that we add imm to 0
+  io.mem.res := Mux(io.id.ctrl.jump, io.id.pc + 4.U(conf.XLEN.W), aluOut)
   io.mem.rd := io.id.rd
   io.mem.we := io.id.ctrl.we
 

@@ -50,18 +50,18 @@ class Decode(implicit conf: Config) extends PipelineStage {
   val we = op =/= Opcode.BRANCH && op =/= Opcode.SYSTEM && op =/= Opcode.MISC_MEM && op =/= Opcode.STORE
 
   //OUTPUTS
-  //AluOp: If opcode = OP, we can simply concat funct7
-  //if opcode = OP_IMM, the uppermostbit is set if funct3 = 101
+  //In LUI, we always forward the value 0 to compute + Uimm
+  //In AUIPC, we forward PC instead of 0
   io.ex.rs1 := rs1
   io.ex.rs2 := rs2
   io.ex.imm := immGen.io.imm
-  io.ex.v1 := reg(rs1)
+  io.ex.v1 := Mux(op === Opcode.LUI, 0.U, Mux(op === Opcode.AUIPC, io.fetch.pc, reg(rs1)))
   io.ex.v2 := reg(rs2)
   io.ex.rd := rd
   io.ex.pc := io.fetch.pc
   val msb = (op === Opcode.OP && funct7 === Funct7.SUB.U) |
     (op === Opcode.OP_IMM && funct3 === Funct3.SRAI.U && funct7(5))
-  io.ex.aluOp := AluOp(Cat(msb, funct3))
+  io.ex.aluOp := Mux(op =/= Opcode.LUI && op =/= Opcode.AUIPC, AluOp(Cat(msb, funct3)), AluOp.ADD)
   io.ex.pcNextSrc := op === Opcode.JALR
   io.ex.ctrl.we := we
   io.ex.ctrl.op2src := op === Opcode.OP //When OP, uses (rs1,rs2) otherwise uses (rs1,imm)
