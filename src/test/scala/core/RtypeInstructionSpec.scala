@@ -45,7 +45,7 @@ class RtypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with M
     operateLast15(funct7, funct3, inst)
     val r = computeResults(inst, op)
     test(new Core()(defaultConf)).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
-      testFun(dut, iters=30, inst)
+      testFun(dut, iters=50, inst)
       for(i <- 0 until 32) {
         expectReg(dut, i, r(i))
       }

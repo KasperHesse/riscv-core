@@ -12,7 +12,7 @@ General:
     - Delayed memory access in IF stage. Keep sending NOPs while waiting for the output to arrive
     - Branch mispredicted. When branch is evaluated in EX-stage, if mispredicted, flush IF and ID
 - Use ready/valid handshake between all stages? Make sure it's not combinationally tied all the way around
-- 
+- Must be at least 2-stage pipeline, due to the way we envision memory accesses in mem-stage
 
 # Stages
 ## core.Fetch
@@ -71,15 +71,17 @@ IO:
 - IO
   - addr: output address to access
   - req: output, flag indicating that we actually want to access this memory location
-  - data (XLEN): input, data word fetched from mem[addr]
-  - ack: input, acknowledge indicating that the desired instruction word can be sampled on this CC
+  - rdata (XLEN): input, data word fetched from mem[addr]
+  - wdata (XLEN): output, data word to write to mem[addr]
+  - ack: input, acknowledge indicating that the desired instruction word can be sampled on the NEXT cc
 - Control signals
   - writeMem: input, whether memory should be written
   - readMem: input, whether memory should be read
 
 ## core.Writeback
 - Control signals
-  - regWrite: Whether to write the result from the mem-stage into regfile
+  - we: Whether to write the result from the mem-stage into regfile
+  - memRead: Whether to use result from mem-stage or ex-stage as the final result
 
 # Others
 ## Hazard detection

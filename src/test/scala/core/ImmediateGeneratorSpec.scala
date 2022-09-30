@@ -13,6 +13,12 @@ class ImmediateGeneratorSpec extends AnyFlatSpec with ChiselScalatestTester with
   val conf = Config()
 
 
+  /**
+   *
+   * @param dut The DUT
+   * @param imm A function that generates a valid immediate
+   * @param m a function taking the generated immediate and returning an Instruction
+   */
   def testFun(dut: ImmediateGenerator, imm: => Int, m: Int => Instruction): Unit = {
     for(_ <- 0 until 10) {
       val i = imm
@@ -22,7 +28,7 @@ class ImmediateGeneratorSpec extends AnyFlatSpec with ChiselScalatestTester with
       dut.io.instr.poke(inst.toUInt)
       dut.clock.step()
       println(f"Peeking immediate ${dut.io.imm.peek()}")
-      dut.io.imm.expect(i)
+      dut.io.imm.expect(i.toLong & 0xffff_ffffL)
       dut.clock.step()
     }
   }

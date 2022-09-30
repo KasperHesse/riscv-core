@@ -34,12 +34,16 @@ class Fetch(implicit conf: Config) extends PipelineStage {
   val nop = ItypeInstruction(imm=0, rs1=0, rd=0, funct3=Funct3.ADDI, op=Opcode.OP_IMM).asUInt //Shorthand for NOP instruction if flushed/stalled
 
   //Storing the most recently sampled instruction in case something goes wrong
-  val sampledInstr = RegEnable(io.mem.data, nop, io.mem.ack)
+  val sampledInstr = RegEnable(io.mem.rdata, nop, io.mem.ack)
 
   //when ack: Send that instruction. Otherwise, if flush, send a nop, otherwise send sampled instr
-  io.id.instr := Mux(io.mem.ack, io.mem.data, Mux(io.ctrl.flush, nop, sampledInstr))
+  io.id.instr := Mux(io.mem.ack, io.mem.rdata, Mux(io.ctrl.flush, nop, sampledInstr))
   io.id.pc := pc
   io.mem.addr := pc
   io.mem.req := req //for now, always requesting new instructions
+
+  //Fetch stage never writes to memory
+  io.mem.wdata := 0.U
+  io.mem.we := false.B
 
 }

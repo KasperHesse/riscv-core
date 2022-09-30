@@ -23,7 +23,7 @@ package object core {
     timescope {
       val addr = imem.addr.peekInt()
       val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM)
-      imem.data.poke(instrs.getOrElse(addr.toInt, nop).toUInt)
+      imem.rdata.poke(instrs.getOrElse(addr.toInt, nop).toUInt)
       imem.ack.poke(true.B)
       clock.step()
     }

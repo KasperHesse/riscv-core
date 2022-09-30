@@ -14,46 +14,31 @@ class Execute(implicit conf: Config) extends PipelineStage {
       }
     }
   })
-  /* Operations that the ordinary ALU can perform. Operates on rs1/pc and rs2/imm/4
-  * Add
-  * Sub
-  * shift left (if shift, only operates on 5 LSB of immediate)
-  * shift right logic
-  * shift right arithmetic
-  * and
-  * or
-  * xor
-  * PC + 4
-  * */
 
-  /* Using a second ALU for branch evaluation. This always takes rs1,rs2 values as inputs
-  * Only computes BEQ, BNE, BLT, BGE, BLTU, BGEU
-  * BNE = !BNE
-  * BLT = !BGE
-  * BLTU = !BGEU //todo: Check if this is correct*/
+  val id = RegEnable(io.id, true.B)
 
   //BRANCH EVALUATION LOGIC
-  val eq = io.id.v1 === io.id.v2
-  val lt = io.id.v1.asSInt < io.id.v2.asSInt
-  val ltu = io.id.v1 < io.id.v2
+  val eq = id.v1 === id.v2
+  val lt = id.v1.asSInt < id.v2.asSInt
+  val ltu = id.v1 < id.v2
 
-  val beq = eq && (io.id.aluOp.asUInt(2,0) === 0.U(3.W))
-  val bne = !eq && (io.id.aluOp.asUInt(2,0) === 1.U(3.W))
-  val blt = lt && (io.id.aluOp.asUInt(2,0) === 4.U(3.W))
-  val bge = !lt && (io.id.aluOp.asUInt(2,0) === 5.U(3.W))
-  val bltu =ltu && (io.id.aluOp.asUInt(2,0) === 6.U(3.W))
-  val bgeu = !ltu && (io.id.aluOp.asUInt(2,0) === 7.U(3.W))
+  val beq = eq && (id.aluOp.asUInt(2,0) === 0.U(3.W))
+  val bne = !eq && (id.aluOp.asUInt(2,0) === 1.U(3.W))
+  val blt = lt && (id.aluOp.asUInt(2,0) === 4.U(3.W))
+  val bge = !lt && (id.aluOp.asUInt(2,0) === 5.U(3.W))
+  val bltu =ltu && (id.aluOp.asUInt(2,0) === 6.U(3.W))
+  val bgeu = !ltu && (id.aluOp.asUInt(2,0) === 7.U(3.W))
 
-  val loadPC = (io.id.ctrl.branch && (beq | bne | blt | bge | bltu | bgeu)) | io.id.ctrl.jump
+  val loadPC = (id.ctrl.branch && (beq | bne | blt | bge | bltu | bgeu)) | id.ctrl.jump
   //We always set the LSB to 0 since JAL, branches already have 0's in the LSB and JALR requires a 0
-  val newPC = Cat((Mux(io.id.pcNextSrc, io.id.v1, io.id.pc) + io.id.imm)(conf.XLEN-1,1), 0.U(1.W))
+  val newPC = Cat((Mux(id.pcNextSrc, id.v1, id.pc) + id.imm)(conf.XLEN-1,1), 0.U(1.W))
 
 
   //ALU FOR CALCULATING REGISTER RESULTS
   val aluOut = Wire(UInt(conf.XLEN.W))
-  val op1 = io.id.v1
-  val op2 = Mux(io.id.ctrl.op2src, io.id.v2, io.id.imm)
-  val carry = io.id.aluOp === AluOp.SUB
+  val op1 = id.v1
+  val op2 = Mux(id.ctrl.op2src, id.v2, id.imm)
+  val carry = id.aluOp === AluOp.SUB
 
 
   val arith = op1 + Mux(carry, (~op2).asUInt, op2) + carry
@@ -62,7 +47,7 @@ class Execute(implicit conf: Config) extends PipelineStage {
   val shifter = Module(new Shifter)
   shifter.io.in := op1
   shifter.io.shamt := op2(if(conf.XLEN == 32) 4 else 5, 0)
-  shifter.io.mode := io.id.aluOp
+  shifter.io.mode := id.aluOp
   val shift = shifter.io.out
 
   //SLT, SLTU
@@ -72,13 +57,13 @@ class Execute(implicit conf: Config) extends PipelineStage {
   val sgn2 = op2(conf.XLEN-1)
   val comp = op1(conf.XLEN-2,0) < op2(conf.XLEN-2,0)
   val slt = Mux(sgn1 === sgn2, comp,  //MSBs are the same, perform unsigned comparison on remaining bits
-    Mux(io.id.aluOp === AluOp.SLT, sgn1 & !sgn2, !sgn1 & sgn2)) //otherwise, use above logic
+    Mux(id.aluOp === AluOp.SLT, sgn1 & !sgn2, !sgn1 & sgn2)) //otherwise, use above logic
 
   //Bitwise logic expressions
-  val logic = Mux(io.id.aluOp === AluOp.AND, op1 & op2, Mux(io.id.aluOp === AluOp.OR, op1 | op2, op1 ^ op2))
+  val logic = Mux(id.aluOp === AluOp.AND, op1 & op2, Mux(id.aluOp === AluOp.OR, op1 | op2, op1 ^ op2))
 
   aluOut := arith //Default clause
-  switch(io.id.aluOp) {
+  switch(id.aluOp) {
     is(AluOp.SLL, AluOp.SRL, AluOp.SRA)  {aluOut := shift}
     is(AluOp.SLT, AluOp.SLTU)            {aluOut := slt}
     is(AluOp.AND, AluOp.OR, AluOp.XOR)  { aluOut := logic}
@@ -87,9 +72,15 @@ class Execute(implicit conf: Config) extends PipelineStage {
   //JAL and JALR require that PC+4 is written to regfile.
   //AUIPC requires that we add imm to PC
   //LUI requires that we add imm to 0
-  io.mem.res := Mux(io.id.ctrl.jump, io.id.pc + 4.U(conf.XLEN.W), aluOut)
-  io.mem.rd := io.id.rd
-  io.mem.we := io.id.ctrl.we
+  io.mem.res := Mux(id.ctrl.jump, id.pc + 4.U(conf.XLEN.W), aluOut)
+  io.mem.rd := id.rd
+  io.mem.wdata := id.v2
+
+  io.mem.ctrl.we := id.ctrl.we
+  io.mem.ctrl.memOp := id.ctrl.memOp
+  io.mem.ctrl.memWrite := id.ctrl.memWrite
+  io.mem.ctrl.memRead := id.ctrl.memRead
+
 
   io.ctrl.fetch.loadPC := loadPC
   io.ctrl.fetch.newPC := newPC
