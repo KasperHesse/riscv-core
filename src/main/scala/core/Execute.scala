@@ -7,6 +7,8 @@ class Execute(implicit conf: Config) extends PipelineStage {
   val io = IO(new Bundle {
     val id = Flipped(new DecodeExecuteIO)
     val mem = new ExecuteMemoryIO
+    val memFwd = Input(new ForwardingPort)
+    val wbFwd = Input(new ForwardingPort)
     val ctrl = new Bundle {
       val fetch = new Bundle {
         val loadPC = Output(Bool())
@@ -16,11 +18,22 @@ class Execute(implicit conf: Config) extends PipelineStage {
   })
 
   val id = RegEnable(io.id, true.B)
+  val fwd = Module(new ForwardingUnit)
+
+  fwd.io.IDrs1 := id.rs1
+  fwd.io.IDrs2 := id.rs2
+  fwd.io.IDv1 := id.v1
+  fwd.io.IDv2 := id.v2
+  fwd.io.mem := io.memFwd
+  fwd.io.wb := io.wbFwd
+
+  val v1 = fwd.io.v1
+  val v2 = fwd.io.v2
 
   //BRANCH EVALUATION LOGIC
-  val eq = id.v1 === id.v2
-  val lt = id.v1.asSInt < id.v2.asSInt
-  val ltu = id.v1 < id.v2
+  val eq = v1 === v2
+  val lt = v1.asSInt < v2.asSInt
+  val ltu = v1 < v2
 
   val beq = eq && (id.aluOp.asUInt(2,0) === 0.U(3.W))
   val bne = !eq && (id.aluOp.asUInt(2,0) === 1.U(3.W))
@@ -31,13 +44,13 @@ class Execute(implicit conf: Config) extends PipelineStage {
 
   val loadPC = (id.ctrl.branch && (beq | bne | blt | bge | bltu | bgeu)) | id.ctrl.jump
   //We always set the LSB to 0 since JAL, branches already have 0's in the LSB and JALR requires a 0
-  val newPC = Cat((Mux(id.pcNextSrc, id.v1, id.pc) + id.imm)(conf.XLEN-1,1), 0.U(1.W))
+  val newPC = Cat((Mux(id.pcNextSrc, v1, id.pc) + id.imm)(conf.XLEN-1,1), 0.U(1.W))
 
 
   //ALU FOR CALCULATING REGISTER RESULTS
   val aluOut = Wire(UInt(conf.XLEN.W))
-  val op1 = id.v1
-  val op2 = Mux(id.ctrl.op2src, id.v2, id.imm)
+  val op1 = v1
+  val op2 = Mux(id.ctrl.op2src, v2, id.imm)
   val carry = id.aluOp === AluOp.SUB
 
 
@@ -74,7 +87,7 @@ class Execute(implicit conf: Config) extends PipelineStage {
   //LUI requires that we add imm to 0
   io.mem.res := Mux(id.ctrl.jump, id.pc + 4.U(conf.XLEN.W), aluOut)
   io.mem.rd := id.rd
-  io.mem.wdata := id.v2
+  io.mem.wdata := v2
 
   io.mem.ctrl.we := id.ctrl.we
   io.mem.ctrl.memOp := id.ctrl.memOp

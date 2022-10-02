@@ -99,19 +99,6 @@ class MemoryWritebackIO(implicit conf: Config) extends Bundle {
 }
 
 /**
- * IO ports between Writeback and Decode stage.
- * Instantiate as-is in the Writeback stage, use Flipped() in the Decode stage
- */
-class WritebackDecodeIO(implicit conf: Config) extends Bundle {
-  /** Write-enable for register file */
-  val we = Output(Bool())
-  /** Register to write into */
-  val rd = Output(UInt(5.W))
-  /** Data to write into rd-register */
-  val wdata = Output(UInt(conf.XLEN.W))
-}
-
-/**
  * Interface between the core and a memory device. Used for both the [[Fetch]] and [[Memory]] stages.
  * The interface is a simple request-acknowledge interface. When `req` is asserted, the address must be valid.
  *
@@ -141,4 +128,18 @@ class MemoryInterface(implicit conf: Config) extends Bundle {
   val rdata = Input(UInt(conf.XLEN.W))
   /** Data to write into mem[addr] */
   val wdata = Output(UInt(conf.XLEN.W))
+}
+
+/**
+ * Port used for forwarding to EX from MEM and WB stages.
+ * Also serves as the interface between WB and ID stages
+ * @param conf
+ */
+class ForwardingPort(implicit conf: Config) extends Bundle {
+  /** Register to be written into */
+  val rd = UInt(5.W)
+  /** Value to be written into that register */
+  val wdata = UInt(conf.XLEN.W)
+  /** Write-enable flag signifying is forwarding should actually take place */
+  val we = Bool()
 }

@@ -8,6 +8,7 @@ class Memory(implicit conf: Config) extends PipelineStage {
     val ex = Flipped(new ExecuteMemoryIO)
     val wb = new MemoryWritebackIO
     val mem = new MemoryInterface
+    val fwd = Output(new ForwardingPort())
   })
   /*
   Memory stage.
@@ -32,6 +33,10 @@ class Memory(implicit conf: Config) extends PipelineStage {
   io.wb.we := ex.ctrl.we
   io.wb.rd := ex.rd
   io.wb.memRead := ex.ctrl.memRead
+
+  io.fwd.rd := ex.rd
+  io.fwd.we := ex.ctrl.we
+  io.fwd.wdata := ex.res
 }
 /*
 two-stage processor

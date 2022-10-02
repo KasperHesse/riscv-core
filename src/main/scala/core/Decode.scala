@@ -15,7 +15,7 @@ class Decode(implicit conf: Config) extends PipelineStage {
   val io = IO(new Bundle {
     val fetch = Flipped(new FetchDecodeIO)
     val ex = new DecodeExecuteIO
-    val wb = Flipped(new WritebackDecodeIO)
+    val wb = Input(new ForwardingPort)
     val dbg = if(!conf.debug) None else Some(new Bundle {
       val reg = Output(Vec(32, UInt(conf.XLEN.W)))
     })
@@ -56,8 +56,10 @@ class Decode(implicit conf: Config) extends PipelineStage {
   val v1 = Mux(io.wb.we && io.wb.rd === rs1, io.wb.wdata, reg(rs1))
   val v2 = Mux(io.wb.we && io.wb.rd === rs2, io.wb.wdata, reg(rs2))
   //OUTPUTS
-  io.ex.rs1 := rs1
-  io.ex.rs2 := rs2
+
+  //LUI, AUIPC and JAL don't ready any instructions. Avoid sending register-values for false forwarding
+  io.ex.rs1 := Mux(op === Opcode.LUI || op === Opcode.AUIPC || op === Opcode.JAL, 0.U, rs1)
+  io.ex.rs2 := Mux(op === Opcode.LUI || op === Opcode.AUIPC || op === Opcode.JAL, 0.U, rs2)
   io.ex.imm := immGen.io.imm
   //In LUI, we always forward the value 0 to compute. FOR AUIPC, we use the pc. Otherwise, reg-value
   io.ex.v1 := Mux(op === Opcode.LUI, 0.U, Mux(op === Opcode.AUIPC, io.fetch.pc, v1))

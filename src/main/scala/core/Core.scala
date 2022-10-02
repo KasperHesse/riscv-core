@@ -21,7 +21,10 @@ class Core(implicit conf: Config) extends Module {
   decode.io.ex <> execute.io.id
   execute.io.mem <> memory.io.ex
   memory.io.wb <> writeback.io.mem
-  writeback.io.id <> decode.io.wb
+  writeback.io.out <> decode.io.wb
+
+  execute.io.memFwd := memory.io.fwd
+  execute.io.wbFwd := writeback.io.out
 
   io.imem <> fetch.io.mem
   io.dmem <> memory.io.mem

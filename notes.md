@@ -89,4 +89,9 @@ The only hazard in the RV32I processor is the load-use hazard, which generates a
 This can be detected when the LD instruction is in the EX stage and the USE instruction in the ID stage, only requiring a stall of ID
 and IF.
 
+## Forwarding
+Values can be forwarded to EX from MEM and WB. 
+- WB can forward its result
+- MEM can only forward the value received from ex.res, and not the value being fetched from memory. 
+
 ## Branch flushing
