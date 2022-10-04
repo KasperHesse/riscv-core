@@ -16,15 +16,16 @@ package object core {
    * @param imem The memory interface that this should drive instructions onto
    */
   def driveInstructionMemory(instrs: Map[Int, Instruction], clock: Clock, imem: MemoryInterface): Unit = {
-    imem.ack.poke(false.B)
-    while(!imem.req.peekBoolean()) {
+    imem.in.ack.poke(false.B)
+    val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM)
+    while(!imem.out.req.peekBoolean()) {
       clock.step()
     }
     timescope {
-      val addr = imem.addr.peekInt()
-      val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM)
-      imem.rdata.poke(instrs.getOrElse(addr.toInt, nop).toUInt)
-      imem.ack.poke(true.B)
+      val addr = imem.out.addr.peekInt()
+
+      imem.in.rdata.poke(instrs.getOrElse(addr.toInt, nop).toUInt)
+      imem.in.ack.poke(true.B)
       clock.step()
     }
   }

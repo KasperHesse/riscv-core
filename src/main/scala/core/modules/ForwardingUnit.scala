@@ -1,6 +1,7 @@
-package core
+package core.modules
 
 import chisel3._
+import core.{Config, ForwardingPort}
 
 class ForwardingUnit(implicit conf: Config) extends Module {
   val io = IO(new Bundle {

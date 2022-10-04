@@ -1,7 +1,8 @@
-package core
+package core.stages
 
 import chisel3._
 import chisel3.util.RegEnable
+import core.{Config, ForwardingPort, MemoryWritebackIO}
 
 class Writeback(implicit conf: Config) extends PipelineStage {
   val io = IO(new Bundle {
@@ -10,8 +11,7 @@ class Writeback(implicit conf: Config) extends PipelineStage {
   })
 
   val mem = RegEnable(io.mem, true.B)
-  val wdata = Mux(mem.memRead, io.mem.rdata, mem.res)
   io.out.we := mem.we
-  io.out.wdata := wdata
+  io.out.wdata := mem.res
   io.out.rd := mem.rd
 }

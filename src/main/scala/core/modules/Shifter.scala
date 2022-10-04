@@ -1,7 +1,8 @@
-package core
+package core.modules
 
 import chisel3._
 import chisel3.util._
+import core.{AluOp, Config}
 
 /**
  * Shifting module that performs logic right-shift, arithmetic right-shift and logic left-shift

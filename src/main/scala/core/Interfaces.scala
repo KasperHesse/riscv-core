@@ -65,13 +65,10 @@ class DecodeExecuteIO(implicit conf: Config) extends Bundle {
 }
 
 class ExecuteMemoryIO(implicit conf: Config) extends Bundle {
-  /** Result generated in execute stage / address to access */
+  /** Result generated in execute stage */
   val res = Output(UInt(conf.XLEN.W))
   /** Register to write result into */
   val rd = Output(UInt(5.W))
-
-  val wdata = Output(UInt(conf.XLEN.W))
-
   /** Control signals passed on from Execute to Memory stage */
   val ctrl = new Bundle {
     /** Write-enable in the WB stage */
@@ -88,46 +85,53 @@ class ExecuteMemoryIO(implicit conf: Config) extends Bundle {
 class MemoryWritebackIO(implicit conf: Config) extends Bundle {
   /** Result generated in execute stage / value fetched from memory */
   val res = Output(UInt(conf.XLEN.W))
-  /** Flag indicating if a value was read from memory. If true, output is from rdata instead of res-port */
-  val memRead = Output(Bool())
-  /** Value fetched from memory. Should NOT be registered */
-  val rdata = Output(UInt(conf.XLEN.W))
   /** Register to write into */
   val rd = Output(UInt(5.W))
   /** Write enable for register file */
   val we = Output(Bool())
 }
 
+
+class MemoryDriverInterface(implicit conf: Config) extends Bundle {
+  /** Request initiating a new memory access */
+  val req = Bool()
+  /** Memory address to acess */
+  val addr = UInt(conf.XLEN.W)
+  /** Data to be written into mem[addr] if `we` is high */
+  val wdata = UInt(conf.XLEN.W)
+  /** Write-enable flag */
+  val we = Bool()
+}
+
+class MemoryResponseInterface(implicit conf: Config) extends Bundle {
+  /** Acknowledge flag, either that valid read data can be sampled or that a write has been performed */
+  val ack = Bool()
+  /** Read data from mem[addr] if a read was performed */
+  val rdata = UInt(conf.XLEN.W)
+}
 /**
- * Interface between the core and a memory device. Used for both the [[Fetch]] and [[Memory]] stages.
+ * Interface between the core and a memory device.
  * The interface is a simple request-acknowledge interface. When `req` is asserted, the address must be valid.
  *
+ * When `ack` is asserted, the operation has been performed. It may be asserted at the earliest on the cycle following
+ * `req` going high.
+ *
  * If a read is performed, `we` is deasserted and `wdata` is undefined.
- * When `ack` is made valid, the read data arrives *on the next clock cycle*. `ack` may be asserted during the same
- * clock cycle as `req` is made valid, to indicate that read data is valid on the subsequent clock cycle.
+ * When `ack` is made valid, the read data must be valid.
  *
  * If a write is performed, `we` is asserted and `wdata` holds the write data. When `ack` is asserted, the write
- * data has been sampled, and may be changed on the next clock cycle.
+ * data has been sampled, and may be changed on the same clock cycle.
  *
- * For both read- and write-operations, when `ack` is asserted, a new request may be initiated on the next clock cycle.
- * If no new request is to be made, `req` must be deasserted. If `ack` is not asserted on the same clock cycle as
- * `req` is asserted, `req` must be kept high until `ack` is valid.
+ * For both read- and write-operations, when `ack` is asserted, a new request may be initiated on the same clock cycle
+ * by keeping `req` high.
+ * If no new request is to be made, `req` must be deasserted.
+ * Until `ack` has been asserted, `req` must be kept high.
 
  * @param conf
  */
 class MemoryInterface(implicit conf: Config) extends Bundle {
-  /** Memory address to access */
-  val addr = Output(UInt(conf.MLEN.W))
-  /** Request initiating a new memory access */
-  val req = Output(Bool())
-  /** Acknowledge that previously requested data has arrived. May go high in same cycle as req */
-  val ack = Input(Bool())
-  /** Write-enable to the memory device */
-  val we = Output(Bool())
-  /** Data retrieved from mem[addr] */
-  val rdata = Input(UInt(conf.XLEN.W))
-  /** Data to write into mem[addr] */
-  val wdata = Output(UInt(conf.XLEN.W))
+  val out = Output(new MemoryDriverInterface)
+  val in = Input(new MemoryResponseInterface)
 }
 
 /**

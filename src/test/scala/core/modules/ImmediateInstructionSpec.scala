@@ -1,11 +1,11 @@
-package core
+package core.modules
 
-import chisel3._
 import chiseltest._
+import core._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.must.Matchers
 
-import scala.collection.mutable.{ListBuffer, WrappedArray}
+import scala.collection.mutable.ListBuffer
 
 class ImmediateInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
   behavior of "I-type instruction"

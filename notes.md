@@ -15,8 +15,8 @@ General:
 - Must be at least 2-stage pipeline, due to the way we envision memory accesses in mem-stage
 
 # Stages
-## core.Fetch
-core.Fetch stage contains the PC and fetches instructions from an external instruction memory / instruction cache.
+## core.stages.Fetch
+core.stages.Fetch stage contains the PC and fetches instructions from an external instruction memory / instruction cache.
 
 IO:
 - To imem / icache
@@ -66,7 +66,7 @@ IO:
 - Control signals
   - op2src: whether the second operand comes from regfile (0) or sign-ext immediate (1)
 
-## core.Memory
+## core.stages.Memory
 
 - IO
   - addr: output address to access
@@ -78,7 +78,7 @@ IO:
   - writeMem: input, whether memory should be written
   - readMem: input, whether memory should be read
 
-## core.Writeback
+## core.stages.Writeback
 - Control signals
   - we: Whether to write the result from the mem-stage into regfile
   - memRead: Whether to use result from mem-stage or ex-stage as the final result

@@ -1,7 +1,8 @@
-package core
+package core.modules
 
 import chisel3._
 import chiseltest._
+import core.{AluOp, defaultConf}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.must.Matchers
 

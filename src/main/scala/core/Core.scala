@@ -1,6 +1,7 @@
 package core
 
 import chisel3._
+import core.stages.{Decode, Execute, Fetch, Memory, Writeback}
 
 class Core(implicit conf: Config) extends Module {
   val io = IO(new Bundle {
@@ -19,7 +20,7 @@ class Core(implicit conf: Config) extends Module {
 
   fetch.io.id <> decode.io.fetch
   decode.io.ex <> execute.io.id
-  execute.io.mem <> memory.io.ex
+  execute.io.memstage <> memory.io.ex
   memory.io.wb <> writeback.io.mem
   writeback.io.out <> decode.io.wb
 
@@ -27,7 +28,8 @@ class Core(implicit conf: Config) extends Module {
   execute.io.wbFwd := writeback.io.out
 
   io.imem <> fetch.io.mem
-  io.dmem <> memory.io.mem
+  io.dmem.out <> execute.io.mem
+  io.dmem.in <> memory.io.mem
 
   //CONTROL SIGNALS NOT YET CONNECTED
   fetch.io.ctrl.stall := false.B

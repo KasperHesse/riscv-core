@@ -1,9 +1,8 @@
-package core
+package core.stages
 
 import chisel3._
 import chisel3.util._
-
-import scala.None
+import core._
 
 /**
  * The Decode stage of the Risc-V processor. Contains the register file and immediate generation logic

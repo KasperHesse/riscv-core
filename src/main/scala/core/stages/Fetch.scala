@@ -1,7 +1,8 @@
-package core
+package core.stages
 
 import chisel3._
 import chisel3.util._
+import core._
 
 class Fetch(implicit conf: Config) extends PipelineStage {
   val io = IO(new Bundle {
@@ -27,23 +28,24 @@ class Fetch(implicit conf: Config) extends PipelineStage {
     //Solution: It should be buffered. Implementing that later
   val pcNext = Mux(io.ctrl.loadPC, io.ctrl.newPC, pc + 4.U)
 
-    when(!io.ctrl.stall && io.mem.ack) {
+    when(!io.ctrl.stall && io.mem.in.ack) {
     pc := pcNext
   } //otherwise, keep current value of PC
 
   val nop = ItypeInstruction(imm=0, rs1=0, rd=0, funct3=Funct3.ADDI, op=Opcode.OP_IMM).asUInt //Shorthand for NOP instruction if flushed/stalled
 
   //Storing the most recently sampled instruction in case something goes wrong
-  val sampledInstr = RegEnable(io.mem.rdata, nop, io.mem.ack)
+  val sampledInstr = RegEnable(io.mem.in.rdata, nop, io.mem.in.ack)
 
   //when ack: Send that instruction. Otherwise, if flush, send a nop, otherwise send sampled instr
-  io.id.instr := Mux(io.mem.ack, io.mem.rdata, Mux(io.ctrl.flush, nop, sampledInstr))
+  //TODO: Should drive addr with nextPC instead of PC
+  io.id.instr := Mux(io.mem.in.ack, io.mem.in.rdata, Mux(io.ctrl.flush, nop, sampledInstr))
   io.id.pc := pc
-  io.mem.addr := pc
-  io.mem.req := req //for now, always requesting new instructions
+  io.mem.out.addr := pc
+  io.mem.out.req := req //for now, always requesting new instructions
 
   //Fetch stage never writes to memory
-  io.mem.wdata := 0.U
-  io.mem.we := false.B
+  io.mem.out.wdata := 0.U
+  io.mem.out.we := false.B
 
 }
