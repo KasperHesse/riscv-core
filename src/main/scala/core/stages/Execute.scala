@@ -12,7 +12,7 @@ class Execute(implicit conf: Config) extends PipelineStage {
     /** Outputs to MEM stage */
     val memstage = new ExecuteMemoryIO
     /** Output to memory module, initiating a memory action if required */
-    val mem = Output(new MemoryDriverInterface)
+    val mem = Output(new MemoryRequest)
     /** Values forwarded from MEM stage */
     val memFwd = Input(new ForwardingPort)
     /** Values forwarded from WB stage */

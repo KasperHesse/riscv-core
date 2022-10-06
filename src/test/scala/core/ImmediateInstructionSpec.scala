@@ -1,7 +1,6 @@
-package core.modules
+package core
 
 import chiseltest._
-import core._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.must.Matchers
 
@@ -174,6 +173,22 @@ class ImmediateInstructionSpec extends AnyFlatSpec with ChiselScalatestTester wi
       testFun(dut, 50, inst)
       for(i <- 0 until 30) {
         println(s"Expecting ${ui(i)+4*i} for pc=${4*i} and immediate ${ui(i)} in reg x$i")
+        expectReg(dut, i+1, ui(i) + 4*i)
+      }
+    }
+  }
+
+  it should "use the SimulationHarness" in {
+    val inst = ListBuffer.empty[Instruction]
+    val ui = Seq.fill(30)(scala.util.Random.nextInt() << 12)
+    for(i <- 0 until 30) {
+      inst += UtypeInstruction(ui(i), i+1, Opcode.AUIPC)
+    }
+    test(new Core()(defaultConf)) {dut =>
+      val imem = new ImemDriver(dut.io.imem, bufferToMap(inst.map(_.toUInt.litValue.toInt)))
+      val sh = new SimulationHarness(dut, Seq(imem))
+      sh.run
+      for(i <- 0 until 30) {
         expectReg(dut, i+1, ui(i) + 4*i)
       }
     }

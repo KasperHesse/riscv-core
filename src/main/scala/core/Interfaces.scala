@@ -91,8 +91,7 @@ class MemoryWritebackIO(implicit conf: Config) extends Bundle {
   val we = Output(Bool())
 }
 
-
-class MemoryDriverInterface(implicit conf: Config) extends Bundle {
+class MemoryRequest(implicit conf: Config) extends Bundle {
   /** Request initiating a new memory access */
   val req = Bool()
   /** Memory address to acess */
@@ -103,7 +102,7 @@ class MemoryDriverInterface(implicit conf: Config) extends Bundle {
   val we = Bool()
 }
 
-class MemoryResponseInterface(implicit conf: Config) extends Bundle {
+class MemoryResponse(implicit conf: Config) extends Bundle {
   /** Acknowledge flag, either that valid read data can be sampled or that a write has been performed */
   val ack = Bool()
   /** Read data from mem[addr] if a read was performed */
@@ -130,8 +129,8 @@ class MemoryResponseInterface(implicit conf: Config) extends Bundle {
  * @param conf
  */
 class MemoryInterface(implicit conf: Config) extends Bundle {
-  val out = Output(new MemoryDriverInterface)
-  val in = Input(new MemoryResponseInterface)
+  val out = Output(new MemoryRequest)
+  val in = Input(new MemoryResponse)
 }
 
 /**

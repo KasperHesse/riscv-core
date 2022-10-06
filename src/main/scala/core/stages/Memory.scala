@@ -11,7 +11,7 @@ class Memory(implicit conf: Config) extends PipelineStage {
     /** Outputs to WB stage */
     val wb = new MemoryWritebackIO
     /** Inputs from memory module */
-    val mem = Input(new MemoryResponseInterface)
+    val mem = Input(new MemoryResponse)
     /** Outputs to forwarding module */
     val fwd = Output(new ForwardingPort())
 
@@ -19,6 +19,8 @@ class Memory(implicit conf: Config) extends PipelineStage {
       val missingAck = Bool()
     })
   })
+
+  chisel3.testers.TesterDriver
   /*
   Memory stage.
   ex.res is the address to be accessed
