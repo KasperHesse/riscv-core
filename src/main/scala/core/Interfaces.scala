@@ -13,7 +13,7 @@ class FetchControlIO(implicit conf: Config) extends Bundle {
   /** Asserted when PC should be updated to not be PC+4 */
   val loadPC = Input(Bool())
   /** New PC to go to when loadPC is asserted */
-  val newPC = Input(UInt(conf.MLEN.W))
+  val newPC = Input(UInt(conf.XLEN.W))
   //stalling: Don't update PC but keep outputting instructions
   //flushing: Zero out the instruction, update PC. Should be used when a branch is taken and the previously loaded instruction was wrong
   /** Flush the stage, changing the instruction to a NOP */
@@ -100,6 +100,8 @@ class MemoryRequest(implicit conf: Config) extends Bundle {
   val wdata = UInt(conf.XLEN.W)
   /** Write-enable flag */
   val we = Bool()
+  /** Write mask for write-operations. Only bytes associated with 1's in the mask are written to memory */
+  val wmask = Vec(conf.XLEN/8, Bool())
 }
 
 class MemoryResponse(implicit conf: Config) extends Bundle {

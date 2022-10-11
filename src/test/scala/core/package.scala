@@ -2,8 +2,8 @@ import chisel3._
 import chiseltest._
 
 import java.io.{BufferedWriter, FileInputStream, FileWriter}
-import scala.collection.mutable.ListBuffer
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 import scala.sys.process._
 
 package object core {
@@ -22,8 +22,8 @@ package object core {
     bw.close()
 
     //Compile and extract .text-segment
-    val compile = s"riscv64-unknown-elf-gcc.exe -march=rv32i -mabi=ilp32 -c $file.s -o $file.o".!
-    val dump = s"riscv64-unknown-elf-objcopy.exe -O binary $file.o $file.bin".!
+    s"riscv64-unknown-elf-gcc.exe -march=rv32i -mabi=ilp32 -c $file.s -o $file.o".! //compile
+    s"riscv64-unknown-elf-objcopy.exe -O binary $file.o $file.bin".! //extract
 
     //Retrieve .text-segment, parse as int
     val fis = new FileInputStream(s"$file.bin")
@@ -42,12 +42,12 @@ package object core {
    * interfaces with a port on the DUT
    * @param port The port that this Driver drives and reads
    */
-  abstract class SimulationDriver(port: Data) {
+  abstract class SimulationDriver(port: Data)(implicit conf: Config) {
     /** Variable set high when [[stop]] is called. Represents end-of-simulation */
     var finish: Boolean = false
     /** The function implementing the drive/monitor loop of this Driver */
     def run(dut: Core): Unit
-    /** Called by [[SimulationHandler]] when execution stops */
+    /** Called by [[SimulationHarness]] when execution stops */
     def stop(): Unit = {
       this.finish = true
     }
@@ -60,7 +60,7 @@ package object core {
    * @param instrs The instructions to drive onto the port.
    *
    */
-  class ImemDriver(port: MemoryInterface, instrs: Map[Int, Int]) extends SimulationDriver(port) {
+  class ImemDriver(port: MemoryInterface, instrs: Map[Int, Int])(implicit conf: Config) extends SimulationDriver(port) {
     override def run(dut: Core): Unit = {
       while(!this.finish) {
         port.in.ack.poke(false.B)
@@ -82,8 +82,8 @@ package object core {
    * @param port The port that this Driver drives and reads
    * @param data An optional initial data mapping. If None is given, starts with an Empty memory
    */
-  class DmemDriver(port: MemoryInterface, val data: Option[mutable.Map[Int, Int]]) extends SimulationDriver(port) {
-    val d = data.getOrElse(mutable.Map.empty[Int,Int])
+  class DmemDriver(port: MemoryInterface, val data: Option[mutable.Map[Int, Byte]])(implicit conf: Config) extends SimulationDriver(port) {
+    val d = data.getOrElse(mutable.Map.empty[Int,Byte])
     override def run(dut: Core): Unit = {
       while(!this.finish) {
         while(!port.out.req.peekBoolean()) {
@@ -94,11 +94,20 @@ package object core {
         val addr = port.out.addr.peekInt().toInt
         val we = port.out.we.peekBoolean()
         val wdata = port.out.wdata.peekInt().toInt
+        val wmask = port.out.wmask.peek()
         dut.clock.step()
         if(we) {
-          d(addr) = wdata
+          for(i <- 0 until conf.WMASKLEN) {
+            if(wmask(i).litToBoolean) {
+              d(addr+i) = ((wdata >> i*8 ) & 0xFF).toByte
+            }
+          }
         } else {
-          port.in.rdata.poke(d.getOrElse(addr, addr))
+          var r = 0L
+          for(i <- 0 until conf.WMASKLEN) {
+            r |= (d.getOrElse(addr+i, 0.toByte) & 0xff) << 8*i
+          }
+          port.in.rdata.poke(r & 0xffffffffL)
         }
         port.in.ack.poke(true.B)
       }
@@ -114,8 +123,8 @@ package object core {
    * @param drivers All drivers that should attach to the DUT
    * @param timeout The maximum number of clock cycles that the simulation should run for. Defaults to 50
    */
-  class SimulationHarness(dut: Core, drivers: Seq[SimulationDriver], timeout: Int = 50) {
-    def run: Unit = {
+  class SimulationHarness(dut: Core, drivers: Seq[SimulationDriver], timeout: Int = 50)(implicit conf: Config) {
+    def run(): Unit = {
       var clkCnt = 0
       drivers.foreach(d => fork{d.run(dut)})
       fork {
@@ -131,8 +140,15 @@ package object core {
     }
   }
 
+
   object SimulationHarness {
-    def apply(dut: Core, instrs: Map[Int, Int]): SimulationHarness = {
+    /**
+     * Create a [[SimulationHarness]] instantiating a [[ImemDriver]] with the contained instructions
+     * and a [[DmemDriver]] initiated with empty memory.
+     * @param dut The DUT to simulate
+     * @param instrs The instructions to supply on the instruction-memory
+     */
+    def apply(dut: Core, instrs: Map[Int, Int])(implicit conf: Config): SimulationHarness = {
       val imem = new ImemDriver(dut.io.imem, instrs)
       val dmem = new DmemDriver(dut.io.dmem, None)
       new SimulationHarness(dut, Seq(imem, dmem))
@@ -166,7 +182,7 @@ package object core {
 
   /**
    * Generates instructions to load random values into registers x1-x15
-   * @param lb
+   * @param lb Buffer of instructions to be written
    */
   def loadFirst15(lb: ListBuffer[Instruction]): Unit = {
     val MAX_12BIT = math.pow(2,12).toInt

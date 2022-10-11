@@ -72,20 +72,21 @@ class Execute(implicit conf: Config) extends PipelineStage {
   io.memstage.res := Mux(id.ctrl.jump, id.pc + 4.U(conf.XLEN.W), aluOut)
   io.memstage.rd := id.rd
 
-  //Serve requests to memory module
+  //MEMORY MODULE CONNECTIONS
   //TODO: Need a way of keeping req high in this stage, if ack isn't signaled in MEM stage
   //Perhaps a register storing old values, using that as output in case a control signal is asserted?
-  val wdata = Wire(UInt(conf.XLEN.W))
-  //TODO use a byte-enable / strobe signal instead (wishbone??)
+
   when(id.ctrl.memOp === Funct3.SB.U) {
-    wdata := 0.U((conf.XLEN-8).W) ## v2(7,0)
+    io.mem.wmask := VecInit(UIntToOH(aluOut(1,0)).asBools)
+    io.mem.wdata := VecInit(Seq.fill(conf.WMASKLEN)(v2(7,0))).asUInt
   } .elsewhen(id.ctrl.memOp === Funct3.SH.U) {
-    wdata := 0.U((conf.XLEN-16).W) ## v2(15,0)
-  } .otherwise {
-    wdata := v2
+    io.mem.wmask := VecInit(Mux(aluOut(1), "b1100".U, "b0011".U).asBools)
+    io.mem.wdata := VecInit(Seq.fill(conf.WMASKLEN/2)(v2(15,0))).asUInt
+  } .otherwise { //SW
+    io.mem.wmask := VecInit("b1111".U.asBools)
+    io.mem.wdata := v2
   }
-  io.mem.wdata := wdata
-  io.mem.addr := aluOut
+  io.mem.addr := aluOut(conf.XLEN-1,2) ## 0.U(2.W) //Must zero out 2 LSB of memory access to use wmask correctly
   io.mem.req := id.ctrl.memWrite | id.ctrl.memRead
   io.mem.we := id.ctrl.memWrite
 

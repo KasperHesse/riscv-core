@@ -343,4 +343,6 @@ hs_err_pid*
 *.bin
 *.s
 *.pdf
-
+*.v
+*.json
+*.fir

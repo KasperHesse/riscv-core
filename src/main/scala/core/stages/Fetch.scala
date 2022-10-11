@@ -20,7 +20,7 @@ class Fetch(implicit conf: Config) extends PipelineStage {
    */
 
 
-  val pc = RegInit(conf.pcReset.U(conf.MLEN.W))
+  val pc = RegInit(conf.pcReset.U(conf.XLEN.W))
 
   val req = WireDefault(true.B)
 
@@ -47,5 +47,6 @@ class Fetch(implicit conf: Config) extends PipelineStage {
   //Fetch stage never writes to memory
   io.mem.out.wdata := 0.U
   io.mem.out.we := false.B
+  io.mem.out.wmask := VecInit(0.U(conf.WMASKLEN.W).asBools)
 
 }

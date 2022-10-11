@@ -5,11 +5,10 @@ import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.must.Matchers
 
-import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
-
 class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
   behavior of "Memory instructions"
+  
+  implicit val conf: Config = defaultConf
 
   it should "perform a SW/LW" in {
     val asm =
@@ -18,16 +17,13 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
         |sw x1, 20(x0)
         |lw x2, 20(x0)
         |""".stripMargin
-    val instrs = assemble(asm).zipWithIndex.map{case (instr, i) => (i*4,instr)}.toMap
-    test(new Core()(defaultConf)).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
-      val imem = new ImemDriver(dut.io.imem, instrs)
-      val dmem = new DmemDriver(dut.io.dmem, None)
-      val sh = new SimulationHarness(dut, Seq(imem, dmem))
-      sh.run
+    val instrs = assembleMap(asm)
+    test(new Core()) {dut =>
+      val sh = SimulationHarness(dut, instrs)
+      sh.run()
 
       expectReg(dut, 1, 4)
       expectReg(dut, 2, 4)
-      assert(dmem.getData(20) == 4)
     }
   }
 
@@ -37,37 +33,29 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
       |sh x1, 20(x0)
       |lh x2, 20(x0)
       |""".stripMargin
-    val instrs = assemble(asm)
-    val insn = instrs.zipWithIndex.map{case (instr,i) => (i*4, instr)}.toMap
-    test(new Core()(defaultConf)) { dut =>
-      val imem = new ImemDriver(dut.io.imem, insn)
-      val dmem = new DmemDriver(dut.io.dmem, None)
-      val sh = new SimulationHarness(dut, Seq(imem, dmem))
-      sh.run
+    val instrs = assembleMap(asm)
+    test(new Core()) { dut =>
+      val sh = SimulationHarness(dut, instrs)
+      sh.run()
 
       expectReg(dut, 1, 25)
       expectReg(dut, 2, 25)
-      assert(dmem.getData(20) == 25)
     }
   }
 
   it should "perform a SB/LB" in {
     val asm = """
-                |li x1, 25
-                |sb x1, 20(x0)
-                |lb x2, 20(x0)
-                |""".stripMargin
-    val instrs = assemble(asm)
-    val insn = instrs.zipWithIndex.map{case (instr,i) => (i*4, instr)}.toMap
-    test(new Core()(defaultConf)) { dut =>
-      val imem = new ImemDriver(dut.io.imem, insn)
-      val dmem = new DmemDriver(dut.io.dmem, None)
-      val sh = new SimulationHarness(dut, Seq(imem, dmem))
-      sh.run
+      |li x1, 25
+      |sb x1, 20(x0)
+      |lb x2, 20(x0)
+      |""".stripMargin
+    val instrs = assembleMap(asm)
+    test(new Core()) { dut =>
+      val sh = SimulationHarness(dut, instrs)
+      sh.run()
 
       expectReg(dut, 1, 25)
       expectReg(dut, 2, 25)
-      assert(dmem.getData(20) == 25)
     }
   }
 
@@ -81,12 +69,10 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
         | lb x3, 0(x0)
         | lb x4, 4(x0)
         |""".stripMargin
-    val instrs = assemble(asm).zipWithIndex.map{case (instr,i) => (i*4, instr)}.toMap
-    test(new Core()(defaultConf)).withAnnotations(Seq(WriteVcdAnnotation)) { dut =>
-      val imem = new ImemDriver(dut.io.imem, instrs)
-      val dmem = new DmemDriver(dut.io.dmem, None)
-      val sh = new SimulationHarness(dut, Seq(imem, dmem))
-      sh.run
+    val instrs = assembleMap(asm)
+    test(new Core()) { dut =>
+      val sh = SimulationHarness(dut, instrs)
+      sh.run()
 
       expectReg(dut, 1, 300)
       expectReg(dut, 2, 428)
@@ -106,9 +92,9 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
         | lbu x4, 4(x0)
         | """.stripMargin
     val instrs = assembleMap(asm)
-    test(new Core()(defaultConf)) {dut =>
+    test(new Core()) {dut =>
       val sh = SimulationHarness(dut, instrs)
-      sh.run
+      sh.run()
 
       expectReg(dut, 1, 0x7f)
       expectReg(dut, 2, 0x80)
@@ -128,9 +114,9 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
         | lh x4, 4(x0)
         | """.stripMargin
     val instrs = assembleMap(asm)
-    test(new Core()(defaultConf)) {dut =>
+    test(new Core()) {dut =>
       val sh = SimulationHarness(dut, instrs)
-      sh.run
+      sh.run()
 
       expectReg(dut, 1, 0x7fff)
       expectReg(dut, 2, 0x8000)
@@ -150,14 +136,105 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
         | lhu x4, 4(x0)
         | """.stripMargin
     val instrs = assembleMap(asm)
-    test(new Core()(defaultConf)) {dut =>
+    test(new Core()) {dut =>
       val sh = SimulationHarness(dut, instrs)
-      sh.run
+      sh.run()
 
       expectReg(dut, 1, 0x7fff)
       expectReg(dut, 2, 0x8000)
       expectReg(dut, 3, 0x7fff)
       expectReg(dut, 4, 0x8000)
+    }
+  }
+
+  it should "perform LB and LBU from any offset" in {
+    val asm =
+      """
+        |li x1, 0xabcd9876
+        |sw x1, 0(x0)
+        |lb x2, 0(x0)
+        |lb x3, 1(x0)
+        |lb x4, 2(x0)
+        |lb x5, 3(x0)
+        |lbu x6, 0(x0)
+        |lbu x7, 1(x0)
+        |lbu x8, 2(x0)
+        |lbu x9, 3(x0)
+        |""".stripMargin
+    val instr = assembleMap(asm)
+    test(new Core()) {dut =>
+      val sh = SimulationHarness(dut, instr)
+      sh.run()
+
+      expectReg(dut, 1, 0xabcd9876L)
+      expectReg(dut, 2, 0x76)
+      expectReg(dut, 3, 0xffffff98)
+      expectReg(dut, 4, 0xffffffcd)
+      expectReg(dut, 5, 0xffffffab)
+      expectReg(dut, 6, 0x76)
+      expectReg(dut, 7, 0x98)
+      expectReg(dut, 8, 0xcd)
+      expectReg(dut, 9, 0xab)
+    }
+  }
+
+  it should "perform SB to any offset" in {
+    val asm =
+      """
+        |li x1, 0x12345678
+        |li x2, 0xff
+        |li x3, 0xee
+        |li x4, 0xdd
+        |li x5, 0xcc
+        |sw x1, 0(x0)
+        |sb x2, 0(x0)
+        |sb x3, 1(x0)
+        |sb x4, 2(x0)
+        |sb x5, 3(x0)
+        |lw x6, 0(x0)
+        |""".stripMargin
+    val instrs = assembleMap(asm)
+    test(new Core()) {dut =>
+      val sh = SimulationHarness(dut, instrs)
+      sh.run()
+
+      expectReg(dut, 1, 0x12345678L)
+      expectReg(dut, 2, 0xff)
+      expectReg(dut, 3, 0xee)
+      expectReg(dut, 4, 0xdd)
+      expectReg(dut, 5, 0xcc)
+      expectReg(dut, 6, 0xccddeeff)
+    }
+  }
+
+  it should "perform SH to any even offset" in {
+    val asm =
+      """
+        |li x1, 0x12345678
+        |li x2, 0xaabb
+        |li x3, 0xccdd
+        |li x4, 0xeeff
+        |li x5, 0x5555
+        |sw x1, 0(x0)
+        |sh x2, 0(x0)
+        |sh x3, 2(x0)
+        |sh x4, 4(x0)
+        |sh x5, 6(x0)
+        |lw x6, 0(x0)
+        |lw x7, 4(x0)
+        |""".stripMargin
+    val instrs = assembleMap(asm)
+    test(new Core) {dut =>
+      val sh = SimulationHarness(dut, instrs)
+      sh.run()
+
+      expectReg(dut, 1, 0x12345678L)
+      expectReg(dut, 2, 0xaabb)
+      expectReg(dut, 3, 0xccdd)
+      expectReg(dut, 4, 0xeeff)
+      expectReg(dut, 5, 0x5555)
+      expectReg(dut, 6, 0xccddaabbL)
+      expectReg(dut, 7, 0x5555eeffL)
     }
   }
 }
