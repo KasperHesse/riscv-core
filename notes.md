@@ -1,5 +1,8 @@
 A generic RV32I core, that should later be parameterized to also support RV64 and the IMAFDZicsr_Zifencei extensions.
 
+# TODO:
+- Flush pipeline registers in IF,ID when branch/jump instructions are taken
+
 General:
 - BRANCHES ARE EVALAUTED IN THE EXECUTE STAGE, requires flushing of IF and ID when taken
 - IMMEDIATES ARE GENERATED IN DECODE STAGE
@@ -11,6 +14,7 @@ General:
   - Sources of flushes:
     - Delayed memory access in IF stage. Keep sending NOPs while waiting for the output to arrive
     - Branch mispredicted. When branch is evaluated in EX-stage, if mispredicted, flush IF and ID
+    - Jump: When a jump is performed, always flush IF and ID stages
 - Use ready/valid handshake between all stages? Make sure it's not combinationally tied all the way around
 - Must be at least 2-stage pipeline, due to the way we envision memory accesses in mem-stage
 
@@ -30,7 +34,8 @@ IO:
 - Control signals
   - loadPC: input, asserted when a branch or jump is executed and new PC should be loaded
   - nextPC: input, the new pc to go to when loadPC is asserted
-  - 
+
+IMEM-connection: Ack should be returned one cycle early (yes/no?)
 
 ## Decode
 - Control signals

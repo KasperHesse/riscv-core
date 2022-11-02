@@ -10,7 +10,7 @@ class Writeback(implicit conf: Config) extends PipelineStage {
     val out = Output(new ForwardingPort())
   })
 
-  val mem = RegEnable(io.mem, true.B)
+  val mem = RegEnable(io.mem, 0.U(io.mem.getWidth.W).asTypeOf(io.mem), true.B)
   io.out.we := mem.we
   io.out.wdata := mem.res
   io.out.rd := mem.rd

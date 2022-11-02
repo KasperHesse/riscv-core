@@ -62,23 +62,23 @@ package object core {
    */
   class ImemDriver(port: MemoryInterface, instrs: Map[Int, Int])(implicit conf: Config) extends SimulationDriver(port) {
     override def run(dut: Core): Unit = {
+      val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM).litValue.toInt
       while(!this.finish) {
-        port.in.ack.poke(false.B)
-        val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM).litValue.toInt
         while(!port.out.req.peekBoolean()) {
+          port.in.ack.poke(false.B)
           dut.clock.step()
         }
-          val addr = port.out.addr.peekInt()
-          port.in.rdata.poke(instrs.getOrElse(addr.toInt, nop).toLong & 0xffff_ffffL)
-          port.in.ack.poke(true.B)
-          dut.clock.step()
+        val addr = port.out.addr.peekInt()
+        port.in.ack.poke(true.B)
+        dut.clock.step()
+        port.in.rdata.poke(instrs.getOrElse(addr.toInt, nop).toLong & 0xffff_ffffL)
       }
     }
   }
 
   /**
    * A [[SimulationDriver]] that represents the attached memory. This driver responds immediately to all memory requests.
-   * If an address is accessed which hasn't yet been written, returns the address
+   * If an address is accessed which hasn't yet been written, returns 0
    * @param port The port that this Driver drives and reads
    * @param data An optional initial data mapping. If None is given, starts with an Empty memory
    */

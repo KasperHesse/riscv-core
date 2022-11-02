@@ -10,7 +10,7 @@ class ExecuteSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
   behavior of "Execute stage"
 
   def branchTest(v1: Seq[Long], v2: Seq[Long], taken: Seq[Boolean], op: AluOp.Type): Unit = {
-    test(new Execute()(defaultConf)).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
+    test(new Execute()(defaultConf)) {dut =>
       val r = scala.util.Random
       val pc = Seq.fill(20)((r.nextInt()/4).toLong &  0xffff_ffffL)
       val imm = Seq.fill(20)((r.nextInt()/8).toLong & 0xffff_ffffL)
@@ -26,8 +26,8 @@ class ExecuteSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
         dut.clock.step()
 
 
-        dut.io.ctrl.fetch.loadPC.expect(taken(i).B, s"v1=${v1(i)}, v2=${v2(i)}, taken=${taken(i)}")
-        dut.io.ctrl.fetch.newPC.expect(res(i), s"v1=${v1(i)}, v2=${v2(i)}, taken=${taken(i)}")
+        dut.io.fetch.loadPC.expect(taken(i).B, s"v1=${v1(i)}, v2=${v2(i)}, taken=${taken(i)}")
+        dut.io.fetch.newPC.expect(res(i), s"v1=${v1(i)}, v2=${v2(i)}, taken=${taken(i)}")
       }
     }
   }

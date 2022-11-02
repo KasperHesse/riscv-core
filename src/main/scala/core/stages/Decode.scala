@@ -3,6 +3,7 @@ package core.stages
 import chisel3._
 import chisel3.util._
 import core._
+import core.modules.DecodeHazardIO
 
 /**
  * The Decode stage of the Risc-V processor. Contains the register file and immediate generation logic
@@ -15,13 +16,14 @@ class Decode(implicit conf: Config) extends PipelineStage {
     val fetch = Flipped(new FetchDecodeIO)
     val ex = new DecodeExecuteIO
     val wb = Input(new ForwardingPort)
+    val hzd = new DecodeHazardIO
     val dbg = if(!conf.debug) None else Some(new Bundle {
       val reg = Output(Vec(32, UInt(conf.XLEN.W)))
     })
   })
 
   /** Pipeline register. Defaults to always sampling */
-  val fetch = RegEnable(io.fetch, true.B)
+  val fetch = RegEnable(io.fetch, 0.U(io.fetch.getWidth.W).asTypeOf(io.fetch), !io.hzd.stall)
 
   //REGISTERS
   /** Register file. Register 0 is redundant but makes things easier to implement */
@@ -61,29 +63,35 @@ class Decode(implicit conf: Config) extends PipelineStage {
   io.ex.rs2 := Mux(op === Opcode.LUI || op === Opcode.AUIPC || op === Opcode.JAL, 0.U, rs2)
   io.ex.imm := immGen.io.imm
   //In LUI, we always forward the value 0 to compute. FOR AUIPC, we use the pc. Otherwise, reg-value
-  io.ex.v1 := Mux(op === Opcode.LUI, 0.U, Mux(op === Opcode.AUIPC, io.fetch.pc, v1))
+  io.ex.v1 := Mux(op === Opcode.LUI, 0.U, Mux(op === Opcode.AUIPC, fetch.pc, v1))
   io.ex.v2 := v2
   io.ex.rd := rd
-  io.ex.pc := io.fetch.pc
-  val msb = (op === Opcode.OP && funct7 === Funct7.SUB.U) |
-    (op === Opcode.OP_IMM && funct3 === Funct3.SRAI.U && funct7(5))
+  io.ex.pc := fetch.pc
+
+  //Should only set MSB for aluOp if operation is SUB, SRA or SRAI
+  //SUB,SRA: When opcode=OP, funct3=(ADD;SRA) && funct7[5]
+  val msb = ((op === Opcode.OP && (funct3 === Funct3.SRA.U || funct3 === Funct3.SUB.U)) |
+    (op === Opcode.OP_IMM && funct3 === Funct3.SRAI.U)) && funct7(5)
   //When OP or OP_IMM, we use funct3 and one more bit to encode AluOp. Otherwise, default to adding operands
-  io.ex.aluOp := Mux(op === Opcode.OP || op === Opcode.OP_IMM, AluOp(Cat(msb, funct3)), AluOp.ADD)
+  io.ex.aluOp := Mux(op === Opcode.OP || op === Opcode.OP_IMM || op === Opcode.BRANCH, AluOp(Cat(msb, funct3)), AluOp.ADD)
   io.ex.pcNextSrc := op === Opcode.JALR
 
-  //CONTROL SIGNALS
+  //CONTROL SIGNALS AND HAZARD AVOIDANCE
   //To execute stage
   io.ex.ctrl.op2src := op === Opcode.OP //When OP, uses (rs1,rs2) otherwise uses (rs1,imm)
   io.ex.ctrl.branch := op === Opcode.BRANCH
   io.ex.ctrl.jump := op === Opcode.JAL || op === Opcode.JALR
 
   //To memory stage
-  io.ex.ctrl.memWrite := op === Opcode.STORE
-  io.ex.ctrl.memRead := op === Opcode.LOAD
+  io.ex.ctrl.memWrite := op === Opcode.STORE && !io.hzd.flush
+  io.ex.ctrl.memRead := op === Opcode.LOAD && !io.hzd.flush
   io.ex.ctrl.memOp := funct3
 
   //To writeback stage
-  io.ex.ctrl.we := we
+  io.ex.ctrl.we := we && !io.hzd.flush
+
+  io.hzd.rs1 := rs1
+  io.hzd.rs2 := rs2
 
   //Debug ports
   if(conf.debug) {

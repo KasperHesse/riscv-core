@@ -103,7 +103,7 @@ class ImmediateInstructionSpec extends AnyFlatSpec with ChiselScalatestTester wi
       inst += ItypeInstruction(scala.util.Random.nextInt(32), i-16, i, Funct3.SRLI, Opcode.OP_IMM)
     }
     val r = computeResults(inst, _>>>_)
-    test(new Core()).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
+    test(new Core()) {dut =>
       testFun(dut, 50, inst)
       for(i <- 0 until 32) {
         expectReg(dut, i, r(i))
@@ -119,7 +119,7 @@ class ImmediateInstructionSpec extends AnyFlatSpec with ChiselScalatestTester wi
       inst += ItypeInstruction(scala.util.Random.nextInt(32) | 0x400, i-16, i, Funct3.SRAI, Opcode.OP_IMM)
     }
     val r = computeResults(inst, _>>_)
-    test(new Core()).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
+    test(new Core()) {dut =>
       testFun(dut, 50, inst)
       for(i <- 0 until 32) {
         expectReg(dut, i, r(i))
@@ -173,10 +173,10 @@ class ImmediateInstructionSpec extends AnyFlatSpec with ChiselScalatestTester wi
     for(i <- 0 until 30) {
       inst += UtypeInstruction(ui(i), i+1, Opcode.AUIPC)
     }
-    test(new Core()).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
+    test(new Core()) {dut =>
       testFun(dut, 50, inst)
       for(i <- 0 until 30) {
-        println(s"Expecting ${ui(i)+4*i} for pc=${4*i} and immediate ${ui(i)} in reg x$i")
+        println(s"Expecting ${ui(i)+4*i} for pc=${4*i} and immediate ${ui(i)} in reg x${i+1}")
         expectReg(dut, i+1, ui(i) + 4*i)
       }
     }

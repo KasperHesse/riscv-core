@@ -3,7 +3,7 @@ package core.stages
 import chisel3._
 import chisel3.util._
 import core._
-import core.modules.{ALU, ForwardingUnit}
+import core.modules.{ALU, ExecuteHazardIO, ForwardingUnit}
 
 class Execute(implicit conf: Config) extends PipelineStage {
   val io = IO(new Bundle {
@@ -17,16 +17,16 @@ class Execute(implicit conf: Config) extends PipelineStage {
     val memFwd = Input(new ForwardingPort)
     /** Values forwarded from WB stage */
     val wbFwd = Input(new ForwardingPort)
-    /** Control signal master bundle */
-    val ctrl = new Bundle {
-      val fetch = new Bundle {
-        val loadPC = Output(Bool())
-        val newPC = Output(UInt(conf.XLEN.W))
-      }
+    /** Control signals to fetch stage */
+    val fetch = new Bundle {
+      val loadPC = Output(Bool())
+      val newPC = Output(UInt(conf.XLEN.W))
     }
+    /** Connections to hazard detection module */
+    val hzd = new ExecuteHazardIO
   })
 
-  val id = RegEnable(io.id, true.B)
+  val id = RegEnable(io.id, 0.U(io.id.getWidth.W).asTypeOf(io.id), !io.hzd.stall)
   val fwd = Module(new ForwardingUnit)
 
   fwd.io.IDrs1 := id.rs1
@@ -57,12 +57,11 @@ class Execute(implicit conf: Config) extends PipelineStage {
 
 
   //ALU FOR CALCULATING REGISTER RESULTS
-  val alu = Module(new ALU)
   //TODO increase bitwidth of op2src to 2, make op1src a signal as well
-  val op1 = v1
-  val op2 = Mux(id.ctrl.op2src, v2, id.imm)
-  alu.io.v1 := op1
-  alu.io.v2 := op2
+  // Will allow us to easier implement JAL and JALR instructions
+  val alu = Module(new ALU)
+  alu.io.v1 := v1
+  alu.io.v2 := Mux(id.ctrl.op2src, v2, id.imm)
   alu.io.op := id.aluOp
   val aluOut = alu.io.res
 
@@ -76,19 +75,24 @@ class Execute(implicit conf: Config) extends PipelineStage {
   //TODO: Need a way of keeping req high in this stage, if ack isn't signaled in MEM stage
   //Perhaps a register storing old values, using that as output in case a control signal is asserted?
 
+  val mask = Wire(Vec(conf.XLEN/8, Bool()))
   when(id.ctrl.memOp === Funct3.SB.U) {
-    io.mem.wmask := VecInit(UIntToOH(aluOut(1,0)).asBools)
+    mask := VecInit(UIntToOH(aluOut(1,0)).asBools)
     io.mem.wdata := VecInit(Seq.fill(conf.WMASKLEN)(v2(7,0))).asUInt
   } .elsewhen(id.ctrl.memOp === Funct3.SH.U) {
-    io.mem.wmask := VecInit(Mux(aluOut(1), "b1100".U, "b0011".U).asBools)
+    mask := VecInit(Mux(aluOut(1), "b1100".U, "b0011".U).asBools)
     io.mem.wdata := VecInit(Seq.fill(conf.WMASKLEN/2)(v2(15,0))).asUInt
   } .otherwise { //SW
-    io.mem.wmask := VecInit("b1111".U.asBools)
+    mask := VecInit("b1111".U.asBools)
     io.mem.wdata := v2
   }
+  //Processing reads
+  //Use an rmask? And then forward the rmask to the mem-stage for processing?
+  //mask can be generated independently of
   io.mem.addr := aluOut(conf.XLEN-1,2) ## 0.U(2.W) //Must zero out 2 LSB of memory access to use wmask correctly
   io.mem.req := id.ctrl.memWrite | id.ctrl.memRead
   io.mem.we := id.ctrl.memWrite
+  io.mem.wmask := mask.map(_ & id.ctrl.memWrite)
 
   //Forward control signals to MEM stage
   io.memstage.ctrl.we := id.ctrl.we
@@ -96,6 +100,11 @@ class Execute(implicit conf: Config) extends PipelineStage {
   io.memstage.ctrl.memWrite := id.ctrl.memWrite
   io.memstage.ctrl.memRead := id.ctrl.memRead
 
-  io.ctrl.fetch.loadPC := loadPC
-  io.ctrl.fetch.newPC := newPC
+  //Control signals and hazard detection
+  io.fetch.loadPC := loadPC
+  io.fetch.newPC := newPC
+
+  io.hzd.rd := id.rd
+  io.hzd.memRead := id.ctrl.memRead
+  io.hzd.loadPC := loadPC
 }

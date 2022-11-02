@@ -14,8 +14,9 @@ class ALU(implicit conf: Config) extends Module {
   val io = IO(new ALUIF)
 
   //Arithmetic logic
+  //Append the carry into the second operand to only instantiate one adder-symbol
   val carry = io.op === AluOp.SUB
-  val arith = io.v1 + Mux(carry, (io.v2).asUInt, io.v2) + carry
+  val arith = ((io.v1 ## 1.U(1.W)) + (Mux(carry, (~io.v2).asUInt, io.v2) ## carry))(conf.XLEN,1)
 
   //Shift logic
   val shifter = Module(new Shifter)

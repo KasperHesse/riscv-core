@@ -44,7 +44,7 @@ class RtypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with M
     loadFirst15(inst)
     operateLast15(funct7, funct3, inst)
     val r = computeResults(inst, op)
-    test(new Core()(defaultConf)).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
+    test(new Core()(defaultConf)) {dut =>
       testFun(dut, iters=50, inst)
       for(i <- 0 until 32) {
         expectReg(dut, i, r(i))
@@ -60,7 +60,6 @@ class RtypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with M
   it should "compute SUB instructions" in {
     regTestFun(Funct7.SUB, Funct3.SUB, _-_)
   }
-
 
   it should "compute SLT instructions" in {
     def slt(x: Int, y: Int): Int = {

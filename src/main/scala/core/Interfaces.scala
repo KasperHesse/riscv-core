@@ -71,11 +71,11 @@ class ExecuteMemoryIO(implicit conf: Config) extends Bundle {
   val rd = Output(UInt(5.W))
   /** Control signals passed on from Execute to Memory stage */
   val ctrl = new Bundle {
-    /** Write-enable in the WB stage */
+    /** Write-enable to the WB stage */
     val we = Output(Bool())
     /** Flag indicating that a value should be fetched from memory and stored in rd */
     val memRead = Output(Bool())
-    /** Flag indicating that the value in rs2 should be written to memory */
+    /** Flag indicating whether a memory write operation was performed */
     val memWrite = Output(Bool())
     /** Type of memory operation to perform. Is the funct3-field from the instruction */
     val memOp = Output(UInt(3.W))
@@ -94,7 +94,7 @@ class MemoryWritebackIO(implicit conf: Config) extends Bundle {
 class MemoryRequest(implicit conf: Config) extends Bundle {
   /** Request initiating a new memory access */
   val req = Bool()
-  /** Memory address to acess */
+  /** Memory address to access */
   val addr = UInt(conf.XLEN.W)
   /** Data to be written into mem[addr] if `we` is high */
   val wdata = UInt(conf.XLEN.W)

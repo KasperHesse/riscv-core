@@ -162,7 +162,7 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
         |lbu x9, 3(x0)
         |""".stripMargin
     val instr = assembleMap(asm)
-    test(new Core()) {dut =>
+    test(new Core()).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
       val sh = SimulationHarness(dut, instr)
       sh.run()
 
@@ -187,6 +187,7 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
         |li x4, 0xdd
         |li x5, 0xcc
         |sw x1, 0(x0)
+        |lw x10, 0(x0)
         |sb x2, 0(x0)
         |sb x3, 1(x0)
         |sb x4, 2(x0)
@@ -203,7 +204,8 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
       expectReg(dut, 3, 0xee)
       expectReg(dut, 4, 0xdd)
       expectReg(dut, 5, 0xcc)
-      expectReg(dut, 6, 0xccddeeff)
+      expectReg(dut, 6, 0xccddeeffL)
+      expectReg(dut, 10, 0x12345678L)
     }
   }
 
@@ -235,6 +237,25 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
       expectReg(dut, 5, 0x5555)
       expectReg(dut, 6, 0xccddaabbL)
       expectReg(dut, 7, 0x5555eeffL)
+    }
+  }
+
+  it should "avoid load-use hazards" in {
+    val asm =
+      """
+        |li x1, 42
+        |sw x1, 0(x0)
+        |lw x2, 0(x0)
+        |addi x3, x2, 5
+        |""".stripMargin
+    val instrs = assembleMap(asm)
+    test(new Core).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
+      val sh = SimulationHarness(dut, instrs)
+      sh.run()
+
+      expectReg(dut, 1, 42)
+      expectReg(dut, 2, 42)
+      expectReg(dut, 3, 47)
     }
   }
 }
