@@ -2,7 +2,10 @@ A generic RV32I core, that should later be parameterized to also support RV64 an
 
 # TODO:
 - Flush pipeline registers in IF,ID when branch/jump instructions are taken
-
+- Think LONG AND HARD about what memory transactions look like
+  - Problems with load use hazards vs. controltransferspec were because one poked read data before clock tick, the other pokes afterwards.
+  - Protocol: Acknowledge arrives ON THE NEXT CLOCK CYCLE
+  - ImemDriver should be updated to also poke ack after clock ticks
 General:
 - BRANCHES ARE EVALAUTED IN THE EXECUTE STAGE, requires flushing of IF and ID when taken
 - IMMEDIATES ARE GENERATED IN DECODE STAGE

@@ -24,22 +24,23 @@ class Decode(implicit conf: Config) extends PipelineStage {
 
   /** Pipeline register. Defaults to always sampling */
   val fetch = RegEnable(io.fetch, 0.U(io.fetch.getWidth.W).asTypeOf(io.fetch), !io.hzd.stall)
+  val instr = io.fetch.instr //Instruction is sampled in fetch stage and not by this register
 
   //REGISTERS
   /** Register file. Register 0 is redundant but makes things easier to implement */
   val reg = RegInit(VecInit(Seq.fill(32)(0.U(conf.XLEN.W))))
 
   //SIGNALS
-  val (op,_) =     Opcode.safe(io.fetch.instr(6,0))
-  val rs1 =    io.fetch.instr(19,15)
-  val rs2 =    io.fetch.instr(24,20)
-  val rd =     io.fetch.instr(11,7)
-  val funct7 = io.fetch.instr(31,25)
-  val funct3 = io.fetch.instr(14,12)
+  val (op,_) =     Opcode.safe(instr(6,0))
+  val rs1 =    instr(19,15)
+  val rs2 =    instr(24,20)
+  val rd =     instr(11,7)
+  val funct7 = instr(31,25)
+  val funct3 = instr(14,12)
 
   //MODULES
   val immGen = Module(new ImmediateGenerator)
-  immGen.io.instr := io.fetch.instr
+  immGen.io.instr := instr
 
   //LOGIC
   //Register write logic

@@ -2,8 +2,6 @@ package core.modules
 
 import chisel3._
 
-
-
 class FetchHazardIO extends Bundle {
   val flush = Input(Bool())
   val stall = Input(Bool())
@@ -49,6 +47,12 @@ class HazardDetection extends Module {
   when(io.EX.memRead && io.EX.rd =/= 0.U && (io.ID.rs1 === io.EX.rd || io.ID.rs2 === io.EX.rd)) {
     io.ID.flush := true.B
     io.IF.stall := true.B
+  }
+
+  //Branch hazard: Flush IF/ID and ID/EX registers, load the new PC
+  when(io.EX.loadPC) {
+    io.ID.flush := true.B
+    io.IF.flush := true.B
   }
   /*
   HAZARD AVOIDANCE

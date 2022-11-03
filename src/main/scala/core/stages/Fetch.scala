@@ -57,9 +57,9 @@ class Fetch(implicit conf: Config) extends PipelineStage {
   }
 
   //Storing the most recently sampled instruction in case something goes wrong
-  val sampledInstr = RegEnable(next=io.mem.in.rdata, init=nop, enable=io.mem.in.ack)
-
-  io.id.instr := Mux(io.hzd.flush, nop, Mux(io.mem.in.ack, io.mem.in.rdata, sampledInstr))
+//  val sampledInstr = RegEnable(next=io.mem.in.rdata, init=nop, enable=io.mem.in.ack)
+  val sampledInstr = io.mem.in.rdata
+  io.id.instr := Mux(io.hzd.flush || !RegNext(io.mem.in.ack), nop, sampledInstr)
   io.id.pc := Mux(io.hzd.stall, pc, pcNext)
   io.mem.out.addr := Mux(io.hzd.stall, pc, pcNext)
   io.mem.out.req := req //for now, always requesting new instructions

@@ -63,14 +63,17 @@ package object core {
   class ImemDriver(port: MemoryInterface, instrs: Map[Int, Int])(implicit conf: Config) extends SimulationDriver(port) {
     override def run(dut: Core): Unit = {
       val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM).litValue.toInt
+      port.in.rdata.poke(1.U)
       while(!this.finish) {
         while(!port.out.req.peekBoolean()) {
           port.in.ack.poke(false.B)
           dut.clock.step()
         }
         val addr = port.out.addr.peekInt()
-        port.in.ack.poke(true.B)
+//        println(f"Peeked address $addr, returning ${instrs.getOrElse(addr.toInt, nop)}")
+        //TODO: sample addr on this side of the clock cycle, poke ack and read data on the other side of the cycle
         dut.clock.step()
+        port.in.ack.poke(true.B)
         port.in.rdata.poke(instrs.getOrElse(addr.toInt, nop).toLong & 0xffff_ffffL)
       }
     }
@@ -96,6 +99,7 @@ package object core {
         val wdata = port.out.wdata.peekInt().toInt
         val wmask = port.out.wmask.peek()
         dut.clock.step()
+        port.in.ack.poke(true.B)
         if(we) {
           for(i <- 0 until conf.WMASKLEN) {
             if(wmask(i).litToBoolean) {
@@ -109,7 +113,6 @@ package object core {
           }
           port.in.rdata.poke(r & 0xffffffffL)
         }
-        port.in.ack.poke(true.B)
       }
     }
 
@@ -166,18 +169,16 @@ package object core {
    * @param imem The memory interface that this should drive instructions onto
    */
   def driveInstructionMemory(instrs: Map[Int, Instruction], clock: Clock, imem: MemoryInterface): Unit = {
-    imem.in.ack.poke(false.B)
+//    imem.in.ack.poke(false.B)
     val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM)
     while(!imem.out.req.peekBoolean()) {
       clock.step()
+      imem.in.ack.poke(false.B)
     }
-    timescope {
-      val addr = imem.out.addr.peekInt()
-
-      imem.in.rdata.poke(instrs.getOrElse(addr.toInt, nop).toUInt)
-      imem.in.ack.poke(true.B)
-      clock.step()
-    }
+    val addr = imem.out.addr.peekInt()
+    clock.step()
+    imem.in.rdata.poke(instrs.getOrElse(addr.toInt, nop).toUInt)
+    imem.in.ack.poke(true.B)
   }
 
   /**

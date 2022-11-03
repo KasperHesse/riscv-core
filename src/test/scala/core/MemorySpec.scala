@@ -162,7 +162,7 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
         |lbu x9, 3(x0)
         |""".stripMargin
     val instr = assembleMap(asm)
-    test(new Core()).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
+    test(new Core()) {dut =>
       val sh = SimulationHarness(dut, instr)
       sh.run()
 
@@ -246,7 +246,7 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
         |li x1, 42
         |sw x1, 0(x0)
         |lw x2, 0(x0)
-        |addi x3, x2, 5
+        |addi x2, x2, 5
         |""".stripMargin
     val instrs = assembleMap(asm)
     test(new Core).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
@@ -254,8 +254,8 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
       sh.run()
 
       expectReg(dut, 1, 42)
-      expectReg(dut, 2, 42)
-      expectReg(dut, 3, 47)
+//      expectReg(dut, 2, 47)
+      expectReg(dut, 2, 47)
     }
   }
 }
