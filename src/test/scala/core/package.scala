@@ -22,8 +22,14 @@ package object core {
     bw.close()
 
     //Compile and extract .text-segment
-    s"riscv64-unknown-elf-gcc.exe -march=rv32i -mabi=ilp32 -c $file.s -o $file.o".! //compile
-    s"riscv64-unknown-elf-objcopy.exe -O binary $file.o $file.bin".! //extract
+    println(s"OS name is: ${System.getProperty("os.name")}")
+    if(System.getProperty("os.name").contains("Windows")) {
+      s"riscv64-unknown-elf-gcc.exe -march=rv32i -mabi=ilp32 -c $file.s -o $file.o".! //compile
+      s"riscv64-unknown-elf-objcopy.exe -O binary $file.o $file.bin".! //extract
+    } else { //Assuming Linux
+      s"riscv64-linux-gnu-gcc -march=rv32i -mabi=ilp32 -c $file.s -o $file.o".!
+      s"riscv64-linux-gnu-objcopy -O binary $file.o $file.bin".!
+    }
 
     //Retrieve .text-segment, parse as int
     val fis = new FileInputStream(s"$file.bin")
@@ -33,6 +39,12 @@ package object core {
       .map(x => (x(0) & 0xff) | ((x(1) & 0xff) << 8) | ((x(2) & 0xff) << 16) | ((x(3) & 0xff) << 24))
       .toArray
   }
+
+  /**
+   * Assemble a program, and then map each instruction consecutively to the address it should be placed at
+   * @param s The program to assemble
+   * @return An int-int map, mapping from addresses to instructions
+   */
   def assembleMap(s: String): Map[Int, Int] = {
     assemble(s).zipWithIndex.map{case (instr, i) => (i*4, instr)}.toMap
   }
@@ -126,7 +138,7 @@ package object core {
    * @param drivers All drivers that should attach to the DUT
    * @param timeout The maximum number of clock cycles that the simulation should run for. Defaults to 50
    */
-  class SimulationHarness(dut: Core, drivers: Seq[SimulationDriver], timeout: Int = 50)(implicit conf: Config) {
+  class SimulationHarness(dut: Core, drivers: Seq[SimulationDriver], var timeout: Int = 50)(implicit conf: Config) {
     def run(): Unit = {
       var clkCnt = 0
       drivers.foreach(d => fork{d.run(dut)})
@@ -140,6 +152,10 @@ package object core {
         drivers.foreach(_.stop())
         println(s"All drivers stopped after $clkCnt clock cycles")
       }.join()
+    }
+
+    def setTimeout(timeout: Int): Unit = {
+      this.timeout = timeout
     }
   }
 
