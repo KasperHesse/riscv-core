@@ -9,25 +9,73 @@ class SimpleProgramsSpec extends AnyFlatSpec with ChiselScalatestTester with Mat
 
   implicit val conf = defaultConf
 
-    it should "compute the sum of 1..100" in {
-      val asm =
-        """
-          |addi x1, x0, 1
-          |add x2, x0, x0
-          |addi x3, x0, 101
-          |L1: add x2, x1, x2
-          |addi x1, x1, 1
-          |blt x1, x3, L1
-          |""".stripMargin
+  it should "compute the sum of 1..100" in {
+    val asm =
+      """
+        |addi x1, x0, 1
+        |add x2, x0, x0
+        |addi x3, x0, 101
+        |L1: add x2, x1, x2
+        |addi x1, x1, 1
+        |blt x1, x3, L1
+        |""".stripMargin
 
-      test(new Core) {dut =>
-        val sh = SimulationHarness(dut, assembleMap(asm))
-        sh.setTimeout(500)
-        sh.run()
+    test(new Core) {dut =>
+      val sh = SimulationHarness(dut, assembleMap(asm))
+      sh.setTimeout(500)
+      sh.run()
 
-        expectReg(dut, 1, 101)
-        expectReg(dut, 2, 5050)
-        expectReg(dut, 3, 101)
-      }
+      expectReg(dut, 1, 101)
+      expectReg(dut, 2, 5050)
+      expectReg(dut, 3, 101)
     }
+  }
+
+  it should "write Hello World to serial output" in {
+    val asm =
+      """
+        |addi x1, x0, 72
+        |addi x2, x0, 101
+        |addi x3, x0, 108
+        |addi x4, x0, 108
+        |addi x5, x0, 111
+        |addi x6, x0, 32
+        |li x10, 0x10000
+        |addi x7, x0, 87
+        |addi x8, x0, 111
+        |slli x8, x8, 8
+        |or x7, x7, x8
+        |add x8, x0, 114
+        |slli x8, x8, 16
+        |or x7, x7, x8
+        |addi x8, x0, 108
+        |slli x8, x8, 24
+        |or x7, x7, x8
+        |addi x8, x0, 100
+        |addi x9, x0, 33
+        |addi x11, x0, 10
+        |sb x1, 0(x10)
+        |sb x2, 0(x10)
+        |sb x3, 0(x10)
+        |sb x4, 0(x10)
+        |sb x5, 0(x10)
+        |sb x6, 0(x10)
+        |sw x7, 0(x10)
+        |sb x8, 0(x10)
+        |sb x9, 0(x10)
+        |sb x11, 0(x10)
+        |""".stripMargin
+
+    test(new Core) { dut =>
+      val imem = new ImemDriver(dut.io.imem, assembleMap(asm))
+      val dmem = new DmemDriver(dut.io.dmem, None, 0, 0x0000ffff)
+      val uart = new SoftwareSerialPort(dut.io.dmem, 0x10000)
+      val sh = new SimulationHarness(dut, Seq(imem, dmem, uart))
+
+      sh.run()
+      assert(uart.getBufString === "Hello World!\n")
+    }
+  }
+
+
 }

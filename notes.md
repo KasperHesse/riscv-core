@@ -1,25 +1,12 @@
 A generic RV32I core, that should later be parameterized to also support RV64 and the IMAFDZicsr_Zifencei extensions.
 
 # TODO:
-- Flush pipeline registers in IF,ID when branch/jump instructions are taken
-- Think LONG AND HARD about what memory transactions look like
-  - Problems with load use hazards vs. controltransferspec were because one poked read data before clock tick, the other pokes afterwards.
-  - Protocol: Acknowledge arrives ON THE NEXT CLOCK CYCLE
-  - ImemDriver should be updated to also poke ack after clock ticks
-General:
-- BRANCHES ARE EVALAUTED IN THE EXECUTE STAGE, requires flushing of IF and ID when taken
-- IMMEDIATES ARE GENERATED IN DECODE STAGE
-- Stall = keep values in the stage, but don't accept new inputs
-  - Sources of stalls:
-    - Delayed memory access in mem-stage: Stall all other stages until mem-result arrives
-    - Load-use hazard, detected in EX+MEM stages. Stall IF,ID,EX, let MEM+WB progress
-- Flush: Discard values in the stage, turning it into a NOP by resetting control signals / instruction
-  - Sources of flushes:
-    - Delayed memory access in IF stage. Keep sending NOPs while waiting for the output to arrive
-    - Branch mispredicted. When branch is evaluated in EX-stage, if mispredicted, flush IF and ID
-    - Jump: When a jump is performed, always flush IF and ID stages
-- Use ready/valid handshake between all stages? Make sure it's not combinationally tied all the way around
-- Must be at least 2-stage pipeline, due to the way we envision memory accesses in mem-stage
+- Stall IF,ID,EX if memory load/store operation does not process in one clock cycle
+- Send NOPs and keep PC constant if new instruction is not fetched in one clock cycle
+- Implement trap handler and simple traps (exit, print)
+  - Add extra signal `trap` which is high when trapped. When trapping, if `mcause` contains a given value (TBD)
+    we exit simulation early.
+  - print-trap should not be in software, but should be a trap handler at predefined memory location.
 
 # Stages
 ## core.stages.Fetch
@@ -37,8 +24,6 @@ IO:
 - Control signals
   - loadPC: input, asserted when a branch or jump is executed and new PC should be loaded
   - nextPC: input, the new pc to go to when loadPC is asserted
-
-IMEM-connection: Ack should be returned one cycle early (yes/no?)
 
 ## Decode
 - Control signals

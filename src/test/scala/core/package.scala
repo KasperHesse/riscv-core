@@ -22,7 +22,6 @@ package object core {
     bw.close()
 
     //Compile and extract .text-segment
-    println(s"OS name is: ${System.getProperty("os.name")}")
     if(System.getProperty("os.name").contains("Windows")) {
       s"riscv64-unknown-elf-gcc.exe -march=rv32i -mabi=ilp32 -c $file.s -o $file.o".! //compile
       s"riscv64-unknown-elf-objcopy.exe -O binary $file.o $file.bin".! //extract
@@ -82,7 +81,6 @@ package object core {
           dut.clock.step()
         }
         val addr = port.out.addr.peekInt()
-//        println(f"Peeked address $addr, returning ${instrs.getOrElse(addr.toInt, nop)}")
         //TODO: sample addr on this side of the clock cycle, poke ack and read data on the other side of the cycle
         dut.clock.step()
         port.in.ack.poke(true.B)
@@ -92,43 +90,90 @@ package object core {
   }
 
   /**
+   * A "serial port" that can be used for simulation purposes to simulate a memory-mapped IO (like a UART)
+   * Values written to the address at which this port is registered are written to the console
+   * @param port The port that this Driver drives and reads
+   * @param addr The address at which this serial monitor should be registered
+   * @param conf
+   */
+  class SoftwareSerialPort(port: MemoryInterface, addr: Int)(implicit conf: Config) extends SimulationDriver(port) {
+    val buf = ListBuffer.empty[Char]
+    /** The function implementing the drive/monitor loop of this Driver */
+    override def run(dut: Core): Unit = {
+      while(!this.finish) {
+        while(!port.out.req.peekBoolean()) {
+          dut.clock.step()
+          //Should *not* poke ack/rdata, as it is connected to the same port as the dmemdriver
+        }
+        val addr = port.out.addr.peekInt().toInt
+        val we = port.out.we.peekBoolean()
+        val wdata = port.out.wdata.peekInt().toInt
+        val wmask = port.out.wmask.peek().map(_.litToBoolean)
+
+        dut.clock.step()
+        if(addr == this.addr) {
+          timescope {
+            port.in.ack.poke(true.B)
+          }
+          val chars = Seq.tabulate(4)(i => ((wdata >> i*8) & 0xFF).toChar)
+          if(we) {
+            //Write the bytes that are high to serial-out
+            wmask.zip(chars).foreach{case (b,c) => if (b) {print(c); buf += c}}
+          }
+        }
+      }
+    }
+
+    def getBuffer: ListBuffer[Char] = this.buf
+    def getBufString: String = this.buf.foldLeft(""){case (a,c) => s"$a$c"}
+  }
+
+  /**
    * A [[SimulationDriver]] that represents the attached memory. This driver responds immediately to all memory requests.
    * If an address is accessed which hasn't yet been written, returns 0
    * @param port The port that this Driver drives and reads
    * @param data An optional initial data mapping. If None is given, starts with an Empty memory
+   * @param low  The lowest address (inclusive) that this dmem driver should respond to
+   * @param high The highest address (inclusive) that this dmem driver should respond to
    */
-  class DmemDriver(port: MemoryInterface, val data: Option[mutable.Map[Int, Byte]])(implicit conf: Config) extends SimulationDriver(port) {
+  class DmemDriver(port: MemoryInterface, val data: Option[mutable.Map[Int, Byte]], var low: Int, var high: Int)(implicit conf: Config) extends SimulationDriver(port) {
     val d = data.getOrElse(mutable.Map.empty[Int,Byte])
     override def run(dut: Core): Unit = {
       while(!this.finish) {
         while(!port.out.req.peekBoolean()) {
           dut.clock.step()
-          port.in.ack.poke(false.B)
-          port.in.rdata.poke(0.U)
+          timescope {
+            port.in.ack.poke(false.B)
+            port.in.rdata.poke(0.U)
+          }
         }
         val addr = port.out.addr.peekInt().toInt
         val we = port.out.we.peekBoolean()
         val wdata = port.out.wdata.peekInt().toInt
         val wmask = port.out.wmask.peek()
         dut.clock.step()
-        port.in.ack.poke(true.B)
-        if(we) {
-          for(i <- 0 until conf.WMASKLEN) {
-            if(wmask(i).litToBoolean) {
-              d(addr+i) = ((wdata >> i*8 ) & 0xFF).toByte
+        if (addr >= this.low && addr <= this.high) {
+          port.in.ack.poke(true.B)
+          if (we) {
+            for (i <- 0 until conf.WMASKLEN) {
+              if (wmask(i).litToBoolean) {
+                d(addr + i) = ((wdata >> i * 8) & 0xFF).toByte
+              }
             }
+          } else {
+            var r = 0L
+            for (i <- 0 until conf.WMASKLEN) {
+              r |= (d.getOrElse(addr + i, 0.toByte) & 0xff) << 8 * i
+            }
+            port.in.rdata.poke(r & 0xffffffffL)
           }
-        } else {
-          var r = 0L
-          for(i <- 0 until conf.WMASKLEN) {
-            r |= (d.getOrElse(addr+i, 0.toByte) & 0xff) << 8*i
-          }
-          port.in.rdata.poke(r & 0xffffffffL)
         }
       }
     }
 
     def getData(addr: Int): Int = d(addr)
+    def setLowBound(low: Int): Unit = this.low = low
+    def setHighBound(high: Int): Unit = this.high = high
   }
 
   /**
@@ -157,6 +202,8 @@ package object core {
     def setTimeout(timeout: Int): Unit = {
       this.timeout = timeout
     }
+
+
   }
 
 
@@ -169,7 +216,7 @@ package object core {
      */
     def apply(dut: Core, instrs: Map[Int, Int])(implicit conf: Config): SimulationHarness = {
       val imem = new ImemDriver(dut.io.imem, instrs)
-      val dmem = new DmemDriver(dut.io.dmem, None)
+      val dmem = new DmemDriver(dut.io.dmem, None, 0, Int.MaxValue)
       new SimulationHarness(dut, Seq(imem, dmem))
     }
   }
