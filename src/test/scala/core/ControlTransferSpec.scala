@@ -12,7 +12,7 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
 
   implicit val conf: Config = defaultConf
 
-  it should "perform a JAL" in {
+  it should "perform a JAL forward" in {
     val asm =
       """
         |addi x2, x0, 15
@@ -24,7 +24,7 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
         |L1: addi x4, x0, 40
         |L2: nop
         |""".stripMargin
-    test(new Core).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
+    test(new Core) {dut =>
       val sh = SimulationHarness(dut, assembleMap(asm))
       sh.run()
       expectReg(dut, 2, 15)
@@ -34,7 +34,32 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
     }
   }
 
-  it should "perform a JALR" in {
+  it should "perform a JAL backward" in {
+    val asm =
+      """
+        |beq x0, x0, L1
+        |addi x10, x0, 10
+        |L2: addi x2, x0, 2
+        |addi x3, x0, 3
+        |and x4, x2, x3
+        |beq x0, x0, L3
+        |L1: jal L2
+        |L3: addi x5, x0 ,5
+        |""".stripMargin
+
+    test(new Core()) {dut =>
+      val sh = SimulationHarness(dut, assembleMap(asm))
+      sh.run()
+      expectReg(dut, 1, 28)
+      expectReg(dut, 2, 2)
+      expectReg(dut, 3, 3)
+      expectReg(dut, 4, 3 & 2)
+      expectReg(dut, 5, 5)
+      expectReg(dut, 10, 0)
+    }
+  }
+
+  it should "perform a JALR forward" in {
     //Addi x1, 29 followed by JALR tests that the LSB of new PC is reset
     //29=11101 -> 28=11100
     val asm =
@@ -59,7 +84,33 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
     }
   }
 
-  it should "perform a BEQ" in {
+  it should "perform a JALR backward with immediate" in {
+    val asm =
+      """
+        |addi x6, x0, 28
+        |beq x0, x0, L1
+        |addi x10, x0, 10
+        |addi x2, x0, 2
+        |addi x3, x0, 3
+        |and x4, x2, x3
+        |beq x0, x0, L3
+        |L1: jalr -16(x6)
+        |L3: addi x5, x0 ,5
+        |""".stripMargin
+    test(new Core) {dut =>
+      val sh = SimulationHarness(dut, assembleMap(asm))
+      sh.run()
+      expectReg(dut, 1, 32)
+      expectReg(dut, 2, 2)
+      expectReg(dut, 3, 3)
+      expectReg(dut, 4, 3 & 2)
+      expectReg(dut, 5, 5)
+      expectReg(dut, 6, 28)
+      expectReg(dut, 10, 0)
+    }
+  }
+
+  it should "take a BEQ" in {
     val asm =
       """
         |addi x2, x0, 15
@@ -69,12 +120,6 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
         |L1: addi x3, x0, 2
         |L2: nop
         |""".stripMargin
-    val instrs = mutable.ListBuffer.empty[Instruction]
-    instrs += ItypeInstruction(15, 0, 2, Funct3.ADDI, Opcode.OP_IMM) //0
-    instrs += BtypeInstruction(12, 2, 2, Funct3.BEQ, Opcode.BRANCH)  //4
-    instrs += ItypeInstruction(1, 0, 4, Funct3.ADDI, Opcode.OP_IMM)  //8, should not be executed
-    instrs += JtypeInstruction(8, 4, Opcode.JAL)                     //12, jump to 20
-    instrs += ItypeInstruction(2, 0, 3, Funct3.ADDI, Opcode.OP_IMM)  //16
 
     test(new Core()(defaultConf)) {dut =>
       val sh = SimulationHarness(dut, assembleMap(asm))
@@ -84,5 +129,36 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
       expectReg(dut, 4, 0)
     }
   }
-  //TODO More randomized tests here
+
+  it should "not take a BEQ" in {
+    val asm =
+      """
+        |addi x2, x0, 15
+        |beq x2, x0, L1
+        |addi x3, x0, 30
+        |beq x0, x0, L2
+        |L1: addi x4, x0, 40
+        |L2: nop
+        |""".stripMargin
+
+    test(new Core()) {dut =>
+      val sh = SimulationHarness(dut, assembleMap(asm))
+      sh.run()
+      expectReg(dut, 2, 15)
+      expectReg(dut, 3, 30)
+      expectReg(dut, 4, 0)
+    }
+  }
+
+  it should "perform a BNE" in {
+    var r = scala.util.Random.nextInt(math.pow(2,12).toInt)-2048
+    if (r == 0) {
+      r = 1
+    }
+    val asm =
+      s"""
+        |li x2 $r
+        |bne x2, x0, L1""".stripMargin
+  }
+  //TODO: More randomized tests
 }
