@@ -26,15 +26,6 @@ class Fetch(implicit conf: Config) extends PipelineStage {
   /** Memory request flag */
   val req = WireDefault(true.B)
 
-  //PC UPDATE LOGIC
-  //when ack && load -> set to newPC
-  //when ack && delayed -> set to delayedPC
-  //otherwise -> pc + 4
-  PCnext := Mux(io.ctrl.loadPC && io.mem.in.ack,
-    io.ctrl.newPC,
-    Mux(delayedLoadPC && io.mem.in.ack,
-      delayedNewPC, PC + 4.U))
-
   //HANDLE LOAD PC WHILE WAITING ON ACK
   //If loadPC arrives while waiting on ack, these regs hold flag and new PC to update to
   val delayedLoadPC = RegInit(false.B)
@@ -45,6 +36,15 @@ class Fetch(implicit conf: Config) extends PipelineStage {
   } .elsewhen(delayedLoadPC && io.mem.in.ack) { //Reset
     delayedLoadPC := false.B
   }
+
+  //PC UPDATE LOGIC
+  //when ack && load -> set to newPC
+  //when ack && delayed -> set to delayedPC
+  //otherwise -> pc + 4
+  PCnext := Mux(io.ctrl.loadPC && io.mem.in.ack,
+    io.ctrl.newPC,
+    Mux(delayedLoadPC && io.mem.in.ack,
+      delayedNewPC, PC + 4.U))
 
   //OUTPUT LOGIC
   //Storing the most recently sampled instruction in case something goes wrong
