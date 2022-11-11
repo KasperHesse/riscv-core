@@ -65,6 +65,37 @@ package object core {
   }
 
   /**
+   * An driver for the instruction memory, where all memory requests may be served on the next clock cycle, or they may be served
+   * after some delay. There is a uniform chance of each delay value in the range [1;maxDelay]
+   * @param port The port that this Driver drives and reads
+   * @param instrs The instructions to drive onto the port
+   * @param maxDelay The maximum number of clock cycles to wait between seeing a request and acknowledging it
+   * @param conf
+   */
+  class ImemDriverWithDelay(port: MemoryInterface, instrs: Map[Int, Int], maxDelay: Int)(implicit conf: Config) extends SimulationDriver(port) {
+    require(maxDelay > 0, s"Imem driver cannot acknowledge on the same cycle as request, maxDelay must be >0, is $maxDelay")
+    override def run(dut: Core): Unit = {
+      val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM).litValue.toInt
+      port.in.rdata.poke(0.U)
+      while(!this.finish) {
+        while(!port.out.req.peekBoolean()) {
+          port.in.ack.poke(false.B)
+          dut.clock.step()
+        }
+        val addr = port.out.addr.peekInt()
+        val d = scala.util.Random.nextInt(maxDelay)+1
+        println(s"Delaying for $d cycles on access to $addr")
+        for(_ <- Range.inclusive(1, d)) {
+          dut.clock.step()
+          port.in.ack.poke(false.B)
+        }
+        port.in.ack.poke(true.B)
+        port.in.rdata.poke(instrs.getOrElse(addr.toInt, nop).toLong & 0xffff_ffffL)
+      }
+    }
+  }
+
+  /**
    * A [[SimulationDriver]] that drives instructions onto the imem-port of the Core.
    * If an address is accessed which doesn't map to an instruction, NOP is returned.
    * @param port The port that this Driver drives and reads
@@ -183,7 +214,7 @@ package object core {
    * @param drivers All drivers that should attach to the DUT
    * @param timeout The maximum number of clock cycles that the simulation should run for. Defaults to 50
    */
-  class SimulationHarness(dut: Core, drivers: Seq[SimulationDriver], var timeout: Int = 50)(implicit conf: Config) {
+  class SimulationHarness(dut: Core, drivers: ListBuffer[SimulationDriver], var timeout: Int = 50)(implicit conf: Config) {
     def run(): Unit = {
       var clkCnt = 0
       drivers.foreach(d => fork{d.run(dut)})
@@ -199,11 +230,20 @@ package object core {
       }.join()
     }
 
+    /**
+     * Sets the simulation timeout for this harness.
+     * If the timeout is exceeded, the simulation is stopped (but does *not* fail)
+     * @param timeout
+     */
     def setTimeout(timeout: Int): Unit = {
       this.timeout = timeout
     }
 
-
+    /**
+     * Adds a new driver to the list of drivers controlled by this harness
+     * @param driver The driver to add
+     */
+    def addDriver(driver: SimulationDriver): Unit = this.drivers += driver
   }
 
 
@@ -217,7 +257,7 @@ package object core {
     def apply(dut: Core, instrs: Map[Int, Int])(implicit conf: Config): SimulationHarness = {
       val imem = new ImemDriver(dut.io.imem, instrs)
       val dmem = new DmemDriver(dut.io.dmem, None, 0, Int.MaxValue)
-      new SimulationHarness(dut, Seq(imem, dmem))
+      new SimulationHarness(dut, ListBuffer(imem, dmem))
     }
   }
 
@@ -232,7 +272,6 @@ package object core {
    * @param imem The memory interface that this should drive instructions onto
    */
   def driveInstructionMemory(instrs: Map[Int, Instruction], clock: Clock, imem: MemoryInterface): Unit = {
-//    imem.in.ack.poke(false.B)
     val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM)
     while(!imem.out.req.peekBoolean()) {
       clock.step()

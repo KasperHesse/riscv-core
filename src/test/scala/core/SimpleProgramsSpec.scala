@@ -4,6 +4,8 @@ import chiseltest.ChiselScalatestTester
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.must.Matchers
 
+import scala.collection.mutable.ListBuffer
+
 class SimpleProgramsSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
   behavior of "Simple programs"
 
@@ -70,12 +72,10 @@ class SimpleProgramsSpec extends AnyFlatSpec with ChiselScalatestTester with Mat
       val imem = new ImemDriver(dut.io.imem, assembleMap(asm))
       val dmem = new DmemDriver(dut.io.dmem, None, 0, 0x0000ffff)
       val uart = new SoftwareSerialPort(dut.io.dmem, 0x10000)
-      val sh = new SimulationHarness(dut, Seq(imem, dmem, uart))
+      val sh = new SimulationHarness(dut, ListBuffer(imem, dmem, uart))
 
       sh.run()
       assert(uart.getBufString === "Hello World!\n")
     }
   }
-
-
 }
