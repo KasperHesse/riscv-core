@@ -117,14 +117,16 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
         out.addr.expect(conf.pcReset)
       }
 
-      //Finally ack it: When ack-ing, this instruction should be turned into a NOP
+      //Finally ack it: When ack-ing, this instruction should be invalidated
       in.rdata.poke(512)
       in.ack.poke(true.B)
-      dut.io.id.instr.expect(0x13) //NOP
+      dut.io.id.instr.expect(512) //NOP
+      dut.io.id.valid.expect(false.B)
       dut.io.id.pc.expect(100) //because next instruction is fetched from PC 100
 
       dut.clock.step()
       dut.io.id.instr.expect(512)
+      dut.io.id.valid.expect(true.B)
       out.addr.expect(104)
     }
   }

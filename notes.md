@@ -1,6 +1,12 @@
 A generic RV32I core, that should later be parameterized to also support RV64 and the IMAFDZicsr_Zifencei extensions.
 
 # TODO:
+- Add explicit valid/ready signalling between pipeline stages. Instead of passing NOP's into Decode from Fetch,
+  simply take valid low. Valid should then propagate through the remaining pipeline stages.
+  - This also allows us to stall the pipeline without an explicit stall signal: If ready is not high
+    (eg delayed memory load), we don't propagate from ID into EX
+  - Use of stall/flush are for special circumstances (e.g. load-use hazard). If delayed memory load, that should
+    be resolvable without manual intervention
 - Stall IF,ID,EX if memory load/store operation does not process in one clock cycle
 - Send NOPs and keep PC constant if new instruction is not fetched in one clock cycle
 - Implement trap handler and simple traps (exit, print)

@@ -22,7 +22,7 @@ class Decode(implicit conf: Config) extends PipelineStage {
     })
   })
 
-  /** Pipeline register. Defaults to always sampling */
+  /** Pipeline register */
   val fetch = RegEnable(io.fetch, 0.U(io.fetch.getWidth.W).asTypeOf(io.fetch), !io.hzd.stall)
   val instr = io.fetch.instr //Instruction is sampled in fetch stage and not by this register
 
@@ -31,7 +31,7 @@ class Decode(implicit conf: Config) extends PipelineStage {
   val reg = RegInit(VecInit(Seq.fill(32)(0.U(conf.XLEN.W))))
 
   //SIGNALS
-  val (op,_) =     Opcode.safe(instr(6,0))
+  val (op,_) = Opcode.safe(instr(6,0))
   val rs1 =    instr(19,15)
   val rs2 =    instr(24,20)
   val rd =     instr(11,7)
@@ -57,8 +57,8 @@ class Decode(implicit conf: Config) extends PipelineStage {
   //Forwarding logic for regfile read
   val v1 = Mux(io.wb.we && io.wb.rd === rs1, io.wb.wdata, reg(rs1))
   val v2 = Mux(io.wb.we && io.wb.rd === rs2, io.wb.wdata, reg(rs2))
-  //OUTPUTS
 
+  //OUTPUTS
   //LUI, AUIPC and JAL don't ready any instructions. Avoid sending register-values for false forwarding
   io.ex.rs1 := Mux(op === Opcode.LUI || op === Opcode.AUIPC || op === Opcode.JAL, 0.U, rs1)
   io.ex.rs2 := Mux(op === Opcode.LUI || op === Opcode.AUIPC || op === Opcode.JAL, 0.U, rs2)
@@ -78,18 +78,21 @@ class Decode(implicit conf: Config) extends PipelineStage {
   io.ex.pcNextSrc := op === Opcode.JALR
 
   //CONTROL SIGNALS AND HAZARD AVOIDANCE
+  val valid = io.fetch.valid && !io.hzd.flush && !io.hzd.stall
+  //All control signals are AND with id.valid to ensure nothing bad happens (functionally a NOP)
   //To execute stage
-  io.ex.ctrl.op2src := op === Opcode.OP //When OP, uses (rs1,rs2) otherwise uses (rs1,imm)
-  io.ex.ctrl.branch := op === Opcode.BRANCH
-  io.ex.ctrl.jump := op === Opcode.JAL || op === Opcode.JALR
+  io.ex.valid := valid
+  io.ex.ctrl.op2src := op === Opcode.OP && valid //When OP, uses (rs1,rs2) otherwise uses (rs1,imm)
+  io.ex.ctrl.branch := op === Opcode.BRANCH && valid
+  io.ex.ctrl.jump := (op === Opcode.JAL || op === Opcode.JALR) && valid
 
   //To memory stage
-  io.ex.ctrl.memWrite := op === Opcode.STORE && !io.hzd.flush
-  io.ex.ctrl.memRead := op === Opcode.LOAD && !io.hzd.flush
-  io.ex.ctrl.memOp := funct3
+  io.ex.ctrl.memWrite := op === Opcode.STORE && valid
+  io.ex.ctrl.memRead := op === Opcode.LOAD && valid
+  io.ex.ctrl.memOp := funct3 & Fill(funct3.getWidth, valid)
 
   //To writeback stage
-  io.ex.ctrl.we := we && !io.hzd.flush
+  io.ex.ctrl.we := we && valid
 
   io.hzd.rs1 := rs1
   io.hzd.rs2 := rs2

@@ -43,7 +43,7 @@ class ImmediateInstructionSpec extends AnyFlatSpec with ChiselScalatestTester wi
     loadFirst15(inst)
     operateLast15(inst, funct3)
     val r = computeResults(inst, op)
-    test(new Core()) {dut =>
+    test(new Core()).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
       testFun(dut, 50, inst)
       for(i <- 0 until 32) {
         expectReg(dut, i, r(i))

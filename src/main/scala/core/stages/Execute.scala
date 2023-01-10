@@ -26,9 +26,12 @@ class Execute(implicit conf: Config) extends PipelineStage {
     val hzd = new ExecuteHazardIO
   })
 
+  /** Pipeline register */
   val id = RegEnable(io.id, 0.U(io.id.getWidth.W).asTypeOf(io.id), !io.hzd.stall)
-  val fwd = Module(new ForwardingUnit)
 
+  //MODULES
+  val alu = Module(new ALU)
+  val fwd = Module(new ForwardingUnit)
   fwd.io.IDrs1 := id.rs1
   fwd.io.IDrs2 := id.rs2
   fwd.io.IDv1 := id.v1
@@ -59,22 +62,14 @@ class Execute(implicit conf: Config) extends PipelineStage {
   //ALU FOR CALCULATING REGISTER RESULTS
   //TODO increase bitwidth of op2src to 2, make op1src a signal as well
   // Will allow us to easier implement JAL and JALR instructions
-  val alu = Module(new ALU)
   alu.io.v1 := v1
   alu.io.v2 := Mux(id.ctrl.op2src, v2, id.imm)
   alu.io.op := id.aluOp
   val aluOut = alu.io.res
 
-  //JAL and JALR require that PC+4 is written to regfile.
-  //AUIPC requires that we add imm to PC
-  //LUI requires that we add imm to 0
-  io.memstage.res := Mux(id.ctrl.jump, id.pc + 4.U(conf.XLEN.W), aluOut)
-  io.memstage.rd := id.rd
-
   //MEMORY MODULE CONNECTIONS
   //TODO: Need a way of keeping req high in this stage, if ack isn't signaled in MEM stage
   //Perhaps a register storing old values, using that as output in case a control signal is asserted?
-
   val mask = Wire(Vec(conf.XLEN/8, Bool()))
   when(id.ctrl.memOp === Funct3.SB.U) {
     mask := VecInit(UIntToOH(aluOut(1,0)).asBools)
@@ -93,6 +88,14 @@ class Execute(implicit conf: Config) extends PipelineStage {
   io.mem.req := id.ctrl.memWrite | id.ctrl.memRead
   io.mem.we := id.ctrl.memWrite
   io.mem.wmask := mask.map(_ & id.ctrl.memWrite)
+
+  //OUTPUTS
+  //JAL and JALR require that PC+4 is written to regfile.
+  //AUIPC requires that we add imm to PC
+  //LUI requires that we add imm to 0
+  io.memstage.res := Mux(id.ctrl.jump, id.pc + 4.U(conf.XLEN.W), aluOut)
+  io.memstage.rd := id.rd
+  io.memstage.valid := id.valid
 
   //Forward control signals to MEM stage
   io.memstage.ctrl.we := id.ctrl.we

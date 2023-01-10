@@ -19,6 +19,7 @@ class Memory(implicit conf: Config) extends PipelineStage {
     val hzd = new MemoryHazardIO
   })
 
+  /** Pipeline register */
   val ex = RegEnable(io.ex, 0.U(io.ex.getWidth.W).asTypeOf(io.ex), true.B)
 
   //Sign-extend read-result, if available
@@ -50,10 +51,12 @@ class Memory(implicit conf: Config) extends PipelineStage {
   }
   //TODO Raise stall if ack is not signalled when ex.ctrl.memRead==1
 
+  //OUTPUTS
   //Outputs to WB stage
   io.wb.res := Mux(ex.ctrl.memRead, rdata, ex.res)
   io.wb.we := ex.ctrl.we
   io.wb.rd := ex.rd
+  io.wb.valid := ex.valid
 
   //Forwarding outputs
   io.fwd.rd := ex.rd

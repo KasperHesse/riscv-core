@@ -7,6 +7,8 @@ class FetchDecodeIO(implicit conf: Config) extends Bundle {
   val instr = Output(UInt(32.W))
   /** PC of the fetched instruction */
   val pc = Output(UInt(conf.XLEN.W))
+  /** Flag indicating if the instruction is valid or not */
+  val valid = Output(Bool())
 }
 
 class FetchControlIO(implicit conf: Config) extends Bundle {
@@ -25,6 +27,8 @@ class FetchControlIO(implicit conf: Config) extends Bundle {
 /** IO-ports between Decode and Execute stage.
  * Instantiate as-is in Decode stage, use Flipped() in Execute stage */
 class DecodeExecuteIO(implicit conf: Config) extends Bundle {
+  /** Valid flag */
+  val valid = Output(Bool())
   /** Immediate value encoded in the instruction if an IMM is used */
   val imm = Output(UInt(conf.XLEN.W))
   /** Value stored in register rs1 */
@@ -37,7 +41,7 @@ class DecodeExecuteIO(implicit conf: Config) extends Bundle {
   val rs2 = Output(UInt(5.W))
   /** PC value of the current instruction, to be used when calculating branches */
   val pc = Output(UInt(conf.XLEN.W))
-  /** Value to write result into if instruction requires this */
+  /** Register to write result into if instruction requires this */
   val rd = Output(UInt(5.W))
   /** Operation for the ALU to perform. In practice, is a concatenation of funct7[5] and funct3.
    * The 3 LSB (funct3) also encode the branch comparison to be performed */
@@ -45,11 +49,11 @@ class DecodeExecuteIO(implicit conf: Config) extends Bundle {
   /** Whether the value to add to the immediate when calculating branch/jump targets is the PC (0, JAL and branches),
    * or value in rs1 (1, JALR) */
   val pcNextSrc = Output(Bool())
-  /** Control values passed on to the Execute stage */
+  /** Control values */
   val ctrl = new Bundle {
-    /** Whether the second operand to ALU comes from register file (1) or immediate (0) */
+    /** Whether the second operand to ALU comes from immediate (0) or register file (1) */
     val op2src = Output(Bool())
-    /** Flag indicating if this is a branch instruction which should be evaluated */
+    /** Flag indicating if this is a branch instruction that should be evaluated */
     val branch = Output(Bool())
     /** Flag indicating if this is an unconditional jump instruction that should be taken */
     val jump = Output(Bool())
@@ -65,6 +69,8 @@ class DecodeExecuteIO(implicit conf: Config) extends Bundle {
 }
 
 class ExecuteMemoryIO(implicit conf: Config) extends Bundle {
+  /** Valid flag */
+  val valid = Output(Bool())
   /** Result generated in execute stage */
   val res = Output(UInt(conf.XLEN.W))
   /** Register to write result into */
@@ -83,6 +89,8 @@ class ExecuteMemoryIO(implicit conf: Config) extends Bundle {
 }
 
 class MemoryWritebackIO(implicit conf: Config) extends Bundle {
+  /** Valid flag */
+  val valid = Output(Bool())
   /** Result generated in execute stage / value fetched from memory */
   val res = Output(UInt(conf.XLEN.W))
   /** Register to write into */
