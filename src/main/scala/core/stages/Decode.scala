@@ -55,8 +55,8 @@ class Decode(implicit conf: Config) extends PipelineStage {
   val we = op =/= Opcode.BRANCH && op =/= Opcode.SYSTEM && op =/= Opcode.MISC_MEM && op =/= Opcode.STORE
 
   //Forwarding logic for regfile read
-  val v1 = Mux(io.wb.we && io.wb.rd === rs1, io.wb.wdata, reg(rs1))
-  val v2 = Mux(io.wb.we && io.wb.rd === rs2, io.wb.wdata, reg(rs2))
+  val v1 = Mux(io.wb.we && io.wb.rd === rs1 && io.wb.rd =/= 0.U, io.wb.wdata, reg(rs1))
+  val v2 = Mux(io.wb.we && io.wb.rd === rs2 && io.wb.rd =/= 0.U, io.wb.wdata, reg(rs2))
 
   //OUTPUTS
   //LUI, AUIPC and JAL don't ready any instructions. Avoid sending register-values for false forwarding
