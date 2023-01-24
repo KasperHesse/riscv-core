@@ -130,4 +130,68 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
       out.addr.expect(104)
     }
   }
+
+  it should "keep PC constant while stalled" in {
+    /*
+    Scenario:
+    Dmem is stalled waiting on load. This also stalls EX, ID and IF stages
+    IF stage should keep PC constant, even if in.ack is true
+     */
+    test(new Fetch) { dut =>
+      //First cycle, ack is always low
+      dut.io.mem.in.ack.poke(false.B)
+      dut.io.mem.out.addr.expect(0.U)
+      dut.clock.step()
+      dut.io.mem.in.ack.poke(true.B)
+      dut.io.mem.out.addr.expect(4.U)
+      for(i <- 2 until 5) {
+        dut.clock.step()
+        dut.io.id.pc.expect((4*i).U)
+      }
+
+      //Before stalling, accessing address 16
+      dut.io.mem.out.addr.expect(16.U)
+      dut.clock.step()
+      //When stalled, stage should keep PC constant
+      //We assume ack=true, so instruction is being used in ID stage.
+      //We shouldn't update PC to ensure instruction isn't lost
+      dut.io.hzd.stall.poke(true.B)
+      dut.io.mem.out.addr.expect(16.U)
+      for(_ <- 0 until 4) {
+        dut.clock.step()
+        dut.io.mem.out.addr.expect(16.U)
+      }
+      dut.io.hzd.stall.poke(false.B)
+      //When stall is deasserted, we can immediately attempt to access instruction at PC=20
+      dut.io.mem.out.addr.expect(20.U)
+      dut.clock.step()
+      dut.io.mem.out.addr.expect(24.U) //Should correctly increment address
+      dut.clock.step()
+      //Stall at the same time as cache miss on 24
+      //Address should not be updated past 24
+      dut.io.hzd.stall.poke(true.B)
+      dut.io.mem.in.ack.poke(false.B)
+      dut.io.mem.out.addr.expect(24.U)
+      for(i <- 0 until 3) {
+        dut.clock.step()
+        dut.io.mem.out.addr.expect(24.U)
+      }
+      //Even though ack becomes true while stalled, we shouldn't update address
+      dut.clock.step()
+      dut.io.mem.in.ack.poke(true.B)
+      dut.io.mem.out.addr.expect(24.U)
+      for(_ <- 0 until 3) {
+        dut.clock.step()
+        dut.io.mem.out.addr.expect(24.U)
+      }
+      dut.clock.step()
+      //Taking stall low should increment address
+      dut.io.hzd.stall.poke(false.B)
+      dut.io.mem.out.addr.expect(28.U)
+
+
+
+
+    }
+  }
 }

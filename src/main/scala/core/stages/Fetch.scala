@@ -40,16 +40,19 @@ class Fetch(implicit conf: Config) extends PipelineStage {
   //PC UPDATE LOGIC
   //when ack && load -> set to newPC
   //when ack && delayed -> set to delayedPC
+  //when stall && ack -> keep at PC
+  //when stall && !ack -> PC+4. Note that PC is not updated at this point
   //otherwise -> pc + 4
-  PCnext := Mux(io.ctrl.loadPC && io.mem.in.ack,
-    io.ctrl.newPC,
-    Mux(delayedLoadPC && io.mem.in.ack,
-      delayedNewPC, PC + 4.U))
+  PCnext := MuxCase(PC + 4.U, Seq(
+    (io.ctrl.loadPC && io.mem.in.ack, io.ctrl.newPC),
+    (delayedLoadPC && io.mem.in.ack, delayedNewPC),
+    (io.hzd.stall && io.mem.in.ack, PC)
+  ))
 
   //OUTPUT LOGIC
   //Storing the most recently sampled instruction in case something goes wrong
   val sampledInstr = RegNext(io.mem.in.rdata)
-  val addr = Mux(io.hzd.stall || !io.mem.in.ack, PC, PCnext)
+  val addr = Mux(!io.mem.in.ack, PC, PCnext)
 
   io.id.instr := io.mem.in.rdata
   io.id.valid := !(io.hzd.flush || !io.mem.in.ack || delayedLoadPC)
