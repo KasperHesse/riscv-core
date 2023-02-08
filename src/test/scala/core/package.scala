@@ -3,10 +3,12 @@ import chiseltest._
 
 import java.io.{BufferedWriter, FileInputStream, FileWriter}
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.sys.process._
 
 package object core {
+
+  val defaultConf = Config(debug=true)
 
   /**
    * Assemble a program
@@ -48,12 +50,150 @@ package object core {
     assemble(s).zipWithIndex.map{case (instr, i) => (i*4, instr)}.toMap
   }
 
+
   /**
-   * A SimulationDriver is a class representing a driver/monitor combo that
-   * interfaces with a port on the DUT
+   * A PortDriver is a class representing an module which is attached to a port on the DUT.
+   * The PortDriver has an associated memory range [low,high] to which it can respond to port transactions.
+   *
+   * @param port The port on which the PortDriver acts
+   * @param low Low memory address that is cached
+   * @param high High memory address that is cached
+   */
+  abstract class PortDriver(port: Data, val low: Int, val high: Int)(implicit conf: Config) {
+    def drive(): Unit
+  }
+
+  /**
+   * The DcacheDriver is a PortDriver attached to the data memory bus of the DUT
+   * @param port The port on which the PortDriver acts
+   * @param clock DUT clock
+   * @param low Low memory address that is cached
+   * @param high High memory address that is cached
+   * @param data Initial data mapping. Defaults to an empty memory
+   */
+  class Dcache(port: MemoryInterface, clock: Clock, low: Int = 0, high: Int = 0xffff)
+              (data: mutable.Map[Int,Byte] = mutable.Map[Int,Byte]())
+              (implicit conf: Config) extends PortDriver(port, low, high) {
+    override def drive(): Unit = {
+      val we = port.out.we.peekBoolean()
+      val wmask = port.out.wmask.peek().asBools.map(_.litToBoolean)
+      val addr = port.out.addr.peekInt().toInt
+      val wdata = port.out.wdata.peekInt().toInt
+
+      clock.step()
+      port.in.ack.poke(true.B)
+      if (we) {
+        for (i <- 0 until conf.WMASKLEN) {
+          if (wmask(i)) {
+            data(addr + i) = ((wdata >> i * 8) & 0xFF).toByte
+          }
+        }
+      } else { //read
+        var r = 0L
+        for (i <- 0 until conf.WMASKLEN) {
+          r |= (data.getOrElse(addr + i, 0.toByte) & 0xff) << 8 * i
+        }
+        port.in.rdata.poke(r & 0xffffffffL)
+      }
+    }
+  }
+
+  object Dcache {
+    def apply(port: MemoryInterface, clock: Clock)(implicit conf: Config): Seq[PortDriver] = {
+      Seq(new Dcache(port, clock)())
+    }
+  }
+
+  /**
+   * A "serial port" that can be used for simulation purposes to simulate a memory-mapped IO (like a UART)
+   * Values written to the address of this driver are written to the console
+   * @param port The port that this Driver drives and reads
+   * @param clock DUT clock
+   * @param low Low memory address that is cached
+   * @param high High memory address that is cached
+   */
+  class SoftwareSerialPort(port: MemoryInterface, clock: Clock, low: Int, high: Int)
+                           (implicit conf: Config) extends PortDriver(port, low, high) {
+    override def drive(): Unit = {
+      val we = port.out.we.peekBoolean()
+      val wdata = port.out.wdata.peekInt().toInt
+      val wmask = port.out.wmask.peek().asBools.map(_.litToBoolean)
+      val chars = Seq.tabulate(4)(i => ((wdata >> i*8) & 0xFF).toChar)
+
+      clock.step()
+      port.in.ack.poke(true.B)
+
+      if(we) {
+        //Write the bytes that are high to serial-out
+        for (i <- chars.indices) {
+          if (wmask(i)) {
+            print(chars(i))/*; buf += chars(i)*/
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * A [[SimulationAgent]] that drives instructions onto the imem-port of the Core.
+   * If an address is accessed which doesn't map to an instruction, NOP is returned.
+   *
+   * @param port The port on which the PortDriver acts
+   * @param clock DUT clock
+   * @param low Low memory address that is cached
+   * @param high High memory address that is cached
+   * @param maxDelay Maximum delay before ack is signalled
+   * @param instrs Instruction mapping
+   * @param conf
+   */
+  class IcacheWithDelay(port: MemoryInterface, clock: Clock, low: Int, high: Int, maxDelay: Int)
+                       (instrs: Map[Int, Int])
+                       (implicit conf: Config) extends PortDriver(port, low, high) {
+    require(maxDelay > 0, s"ImemDriver cannot acknowledge on same cycle as request, maxDelay must be >0, is $maxDelay")
+
+    val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM).litValue.toInt
+    override def drive(): Unit = {
+      val addr = port.out.addr.peekInt().toInt
+      val d = scala.util.Random.nextInt(maxDelay) + 1
+      println(s"Access to $addr, ack after $d")
+      for (_ <- 1 to d) {
+        clock.step()
+        port.in.ack.poke(false.B)
+      }
+      port.in.ack.poke(true.B)
+      port.in.rdata.poke(instrs.getOrElse(addr, nop).toLong & 0xffff_ffffL)
+    }
+  }
+
+  /**
+   * A variant of [[IcacheWithDelay]] which always responds to memory requests on the next clock cycle
+ *
+   * @param port The port on which the PortDriver acts
+   * @param clock DUT clock
+   * @param low Low memory address that is cached
+   * @param high High memory address that is cached
+   * @param instrs Instruction mapping
+   * @param conf
+   */
+  class Icache(port: MemoryInterface, clock: Clock, low: Int, high: Int)
+              (instrs: Map[Int, Int])
+              (implicit conf: Config) extends IcacheWithDelay(port, clock, low, high, 1)(instrs)
+
+  object Icache {
+    def apply(port: MemoryInterface, clock: Clock, instrs: Map[Int, Int])(implicit conf: Config): Seq[Icache] = {
+      Seq(new Icache(port, clock, 0, 0xffff)(instrs))
+    }
+  }
+
+  /**
+   * A SimulationAgent is a class representing a driver/monitor combo that
+   * interfaces with a port on the DUT. The agent may have a number of [[PortDriver]] registered to it.
+   * These drivers will respond to actions on the associated port
+ *
    * @param port The port that this Driver drives and reads
    */
-  abstract class SimulationDriver(port: Data)(implicit conf: Config) {
+  abstract class SimulationAgent(port: Data)(implicit conf: Config) {
+    val pds = ListBuffer.empty[PortDriver]
     /** Variable set high when [[stop]] is called. Represents end-of-simulation */
     var finish: Boolean = false
     /** The function implementing the drive/monitor loop of this Driver */
@@ -62,162 +202,61 @@ package object core {
     def stop(): Unit = {
       this.finish = true
     }
+    def register(pd: PortDriver): Unit = {
+      this.pds.append(pd)
+    }
+    def register(pds: Seq[PortDriver]): Unit = {
+      pds.foreach(this.pds.append)
+    }
   }
 
   /**
-   * An driver for the instruction memory, where all memory requests may be served on the next clock cycle, or they may be served
-   * after some delay. There is a uniform chance of each delay value in the range [1;maxDelay]
-   * @param port The port that this Driver drives and reads
-   * @param instrs The instructions to drive onto the port
-   * @param maxDelay The maximum number of clock cycles to wait between seeing a request and acknowledging it
-   * @param conf
+   * A [[SimulationAgent]] that acts on the data or instruction memory bus.
+ *
+   * @param port The port that this Agent monitors and drives
    */
-  class ImemDriverWithDelay(port: MemoryInterface, instrs: Map[Int, Int], maxDelay: Int)(implicit conf: Config) extends SimulationDriver(port) {
-    require(maxDelay > 0, s"Imem driver cannot acknowledge on the same cycle as request, maxDelay must be >0, is $maxDelay")
+  class MemAgent(port: MemoryInterface)(implicit conf: Config) extends SimulationAgent(port) {
     override def run(dut: Core): Unit = {
-      val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM).litValue.toInt
+      port.in.ack.poke(false.B)
       port.in.rdata.poke(0.U)
       while(!this.finish) {
-        while(!port.out.req.peekBoolean()) {
-          port.in.ack.poke(false.B)
-          dut.clock.step()
-        }
-        val addr = port.out.addr.peekInt()
-        val d = scala.util.Random.nextInt(maxDelay)+1
-        println(s"Delaying for $d cycles on access to $addr")
-        for(_ <- Range.inclusive(1, d)) {
+        if (!port.out.req.peekBoolean()) {
           dut.clock.step()
           port.in.ack.poke(false.B)
-        }
-        port.in.ack.poke(true.B)
-        port.in.rdata.poke(instrs.getOrElse(addr.toInt, nop).toLong & 0xffff_ffffL)
-      }
-    }
-  }
-
-  /**
-   * A [[SimulationDriver]] that drives instructions onto the imem-port of the Core.
-   * If an address is accessed which doesn't map to an instruction, NOP is returned.
-   * @param port The port that this Driver drives and reads
-   * @param instrs The instructions to drive onto the port.
-   *
-   */
-  class ImemDriver(port: MemoryInterface, instrs: Map[Int, Int])(implicit conf: Config) extends SimulationDriver(port) {
-    override def run(dut: Core): Unit = {
-      val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM).litValue.toInt
-      port.in.rdata.poke(1.U)
-      while(!this.finish) {
-        while(!port.out.req.peekBoolean()) {
-          port.in.ack.poke(false.B)
-          dut.clock.step()
-        }
-        val addr = port.out.addr.peekInt()
-        //TODO: sample addr on this side of the clock cycle, poke ack and read data on the other side of the cycle
-        dut.clock.step()
-        port.in.ack.poke(true.B)
-        port.in.rdata.poke(instrs.getOrElse(addr.toInt, nop).toLong & 0xffff_ffffL)
-      }
-    }
-  }
-
-  /**
-   * A "serial port" that can be used for simulation purposes to simulate a memory-mapped IO (like a UART)
-   * Values written to the address at which this port is registered are written to the console
-   * @param port The port that this Driver drives and reads
-   * @param addr The address at which this serial monitor should be registered
-   * @param conf
-   */
-  class SoftwareSerialPort(port: MemoryInterface, addr: Int)(implicit conf: Config) extends SimulationDriver(port) {
-    val buf = ListBuffer.empty[Char]
-    /** The function implementing the drive/monitor loop of this Driver */
-    override def run(dut: Core): Unit = {
-      while(!this.finish) {
-        while(!port.out.req.peekBoolean()) {
-          dut.clock.step()
-          //Should *not* poke ack/rdata, as it is connected to the same port as the dmemdriver
-        }
-        val addr = port.out.addr.peekInt().toInt
-        val we = port.out.we.peekBoolean()
-        val wdata = port.out.wdata.peekInt().toInt
-        val wmask = port.out.wmask.peek().map(_.litToBoolean)
-
-        dut.clock.step()
-        if(addr == this.addr) {
-          timescope {
-            port.in.ack.poke(true.B)
-          }
-          val chars = Seq.tabulate(4)(i => ((wdata >> i*8) & 0xFF).toChar)
-          if(we) {
-            //Write the bytes that are high to serial-out
-            wmask.zip(chars).foreach{case (b,c) => if (b) {print(c); buf += c}}
-          }
-        }
-      }
-    }
-
-    def getBuffer: ListBuffer[Char] = this.buf
-    def getBufString: String = this.buf.foldLeft(""){case (a,c) => s"$a$c"}
-  }
-
-  /**
-   * A [[SimulationDriver]] that represents the attached memory. This driver responds immediately to all memory requests.
-   * If an address is accessed which hasn't yet been written, returns 0
-   * @param port The port that this Driver drives and reads
-   * @param data An optional initial data mapping. If None is given, starts with an Empty memory
-   * @param low  The lowest address (inclusive) that this dmem driver should respond to
-   * @param high The highest address (inclusive) that this dmem driver should respond to
-   */
-  class DmemDriver(port: MemoryInterface, val data: Option[mutable.Map[Int, Byte]], var low: Int, var high: Int)(implicit conf: Config) extends SimulationDriver(port) {
-    val d = data.getOrElse(mutable.Map.empty[Int,Byte])
-    override def run(dut: Core): Unit = {
-      while(!this.finish) {
-        while(!port.out.req.peekBoolean()) {
-          dut.clock.step()
-          timescope {
-            port.in.ack.poke(false.B)
-            port.in.rdata.poke(0.U)
-          }
-        }
-        val addr = port.out.addr.peekInt().toInt
-        val we = port.out.we.peekBoolean()
-        val wdata = port.out.wdata.peekInt().toInt
-        val wmask = port.out.wmask.peek()
-        dut.clock.step()
-        if (addr >= this.low && addr <= this.high) {
-          port.in.ack.poke(true.B)
-          if (we) {
-            for (i <- 0 until conf.WMASKLEN) {
-              if (wmask(i).litToBoolean) {
-                d(addr + i) = ((wdata >> i * 8) & 0xFF).toByte
-              }
+          port.in.rdata.poke(0.U)
+        } else {
+          val addr = port.out.addr.peekInt().toInt
+          for (pd <- pds) {
+            if (pd.low <= addr && addr <= pd.high) {
+              pd.drive()
             }
-          } else {
-            var r = 0L
-            for (i <- 0 until conf.WMASKLEN) {
-              r |= (d.getOrElse(addr + i, 0.toByte) & 0xff) << 8 * i
-            }
-            port.in.rdata.poke(r & 0xffffffffL)
           }
         }
       }
     }
-
-    def getData(addr: Int): Int = d(addr)
-    def setLowBound(low: Int): Unit = this.low = low
-    def setHighBound(high: Int): Unit = this.high = high
   }
 
+  object MemAgent {
+    def apply(port: MemoryInterface, pds: Seq[PortDriver])(implicit conf: Config): MemAgent = {
+      val ma = new MemAgent(port)
+      ma.register(pds)
+      ma
+    }
+  }
+
+
   /**
-   * The simulation harness wraps the DUT and a number of [[SimulationDriver]]s to provide the full
+   * The simulation harness wraps the DUT and a number of [[SimulationAgent]]s to provide the full
    * test I/O
+ *
    * @param dut The DUT to attach this harness to
-   * @param drivers All drivers that should attach to the DUT
+   * @param agents All agents that should attach to the DUT
    * @param timeout The maximum number of clock cycles that the simulation should run for. Defaults to 50
    */
-  class SimulationHarness(dut: Core, drivers: ListBuffer[SimulationDriver], var timeout: Int = 50)(implicit conf: Config) {
+  class SimulationHarness(dut: Core, agents: ListBuffer[SimulationAgent], var timeout: Int = 50)(implicit conf: Config) {
     def run(): Unit = {
       var clkCnt = 0
-      drivers.foreach(d => fork{d.run(dut)})
+      agents.foreach(d => fork{d.run(dut)})
       fork {
         do {
           dut.clock.step()
@@ -225,9 +264,10 @@ package object core {
           //Cannot stop by peeking in.rdata, as that is being poked by another thread
           //Must peek something other than that (IRQ signal?)
         } while(clkCnt < timeout)
-        drivers.foreach(_.stop())
+        agents.foreach(_.stop())
         println(s"All drivers stopped after $clkCnt clock cycles")
       }.join()
+
     }
 
     /**
@@ -240,28 +280,33 @@ package object core {
     }
 
     /**
-     * Adds a new driver to the list of drivers controlled by this harness
-     * @param driver The driver to add
+     * Adds a new agent to the list of agents controlled by this harness
+     * @param agent The agent to add
      */
-    def addDriver(driver: SimulationDriver): Unit = this.drivers += driver
+    def addAgent(agent: SimulationAgent): Unit = this.agents += agent
   }
 
 
   object SimulationHarness {
     /**
-     * Create a [[SimulationHarness]] instantiating a [[ImemDriver]] with the contained instructions
-     * and a [[DmemDriver]] initiated with empty memory.
+     * Create a [[SimulationHarness]] instantiating an [[Icache]] with the contained instructions
+     * and a [[Dcache]] initiated with empty memory.
+ *
      * @param dut The DUT to simulate
      * @param instrs The instructions to supply on the instruction-memory
      */
     def apply(dut: Core, instrs: Map[Int, Int])(implicit conf: Config): SimulationHarness = {
-      val imem = new ImemDriver(dut.io.imem, instrs)
-      val dmem = new DmemDriver(dut.io.dmem, None, 0, Int.MaxValue)
+      val imem = new MemAgent(dut.io.imem)
+      val dmem = new MemAgent(dut.io.dmem)
+
+      imem.register(new Icache(dut.io.imem, dut.clock, 0, 0x7fff_ffff)(instrs))
+      dmem.register(new Dcache(dut.io.dmem, dut.clock, 0, 0xffff)())
+
       new SimulationHarness(dut, ListBuffer(imem, dmem))
     }
   }
 
-  val defaultConf = Config(debug=true)
+
   /**
    * Acts as a memory module connected to the instruction memory, serving instructions when requested.
    * Always returns a result on the same clock cycle as the request is raised.
@@ -323,3 +368,163 @@ package object core {
     dut.io.dbg.get.reg(i).expect(v.U)
   }
 }
+
+
+/*
+ * An driver for the instruction memory, where all memory requests may be served on the next clock cycle, or they may be served
+ * after some delay. There is a uniform chance of each delay value in the range [1;maxDelay]
+ * @param port The port that this Driver drives and reads
+ * @param instrs The instructions to drive onto the port
+ * @param maxDelay The maximum number of clock cycles to wait between seeing a request and acknowledging it
+ * @param conf
+ */
+/*class ImemDriverWithDelayy(port: MemoryInterface, instrs: Map[Int, Int], maxDelay: Int)(implicit conf: Config) extends SimulationAgent(port) {
+  require(maxDelay > 0, s"Imem driver cannot acknowledge on the same cycle as request, maxDelay must be >0, is $maxDelay")
+  override def run(dut: Core): Unit = {
+    val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM).litValue.toInt
+    port.in.rdata.poke(0.U)
+    while(!this.finish) {
+      while(!port.out.req.peekBoolean()) {
+        port.in.ack.poke(false.B)
+        dut.clock.step()
+      }
+      val addr = port.out.addr.peekInt()
+      val d = scala.util.Random.nextInt(maxDelay)+1
+      println(s"Delaying for $d cycles on access to $addr")
+      for(_ <- Range.inclusive(1, d)) {
+        dut.clock.step()
+        port.in.ack.poke(false.B)
+      }
+      port.in.ack.poke(true.B)
+      port.in.rdata.poke(instrs.getOrElse(addr.toInt, nop).toLong & 0xffff_ffffL)
+    }
+  }
+}*/
+
+/*
+ * A [[SimulationAgent]] that drives instructions onto the imem-port of the Core.
+ * If an address is accessed which doesn't map to an instruction, NOP is returned.
+*
+ * @param port The port that this Driver drives and reads
+ * @param instrs The instructions to drive onto the port.
+ *
+ */
+/*class ImemDriver(port: MemoryInterface, instrs: Map[Int, Int])(implicit conf: Config) extends SimulationAgent(port) {
+  override def run(dut: Core): Unit = {
+    val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM).litValue.toInt
+    port.in.rdata.poke(1.U)
+    while(!this.finish) {
+      while(!port.out.req.peekBoolean()) {
+        port.in.ack.poke(false.B)
+        dut.clock.step()
+      }
+      val addr = port.out.addr.peekInt()
+      dut.clock.step()
+      port.in.ack.poke(true.B)
+      port.in.rdata.poke(instrs.getOrElse(addr.toInt, nop).toLong & 0xffff_ffffL)
+    }
+  }
+}*/
+
+/*
+ * A "serial port" that can be used for simulation purposes to simulate a memory-mapped IO (like a UART)
+ * Values written to the address at which this port is registered are written to the console
+ * @param port The port that this Driver drives and reads
+ * @param address The address at which this serial monitor should be registered
+ * @param conf
+ */
+/*class SoftwareSerialPort(port: MemoryInterface, address: Int)(implicit conf: Config) extends SimulationAgent(port) {
+  val buf = ListBuffer.empty[Char]
+
+  /** The function implementing the drive/monitor loop of this Driver */
+  override def run(dut: Core): Unit = {
+    while(!this.finish) {
+
+      while(!port.out.req.peekBoolean()) {
+        dut.clock.step()
+        //Should *not* poke ack/rdata, as it is connected to the same port as the dmemdriver
+      }
+
+      val addr = port.out.addr.peekInt().toInt
+      val we = port.out.we.peekBoolean()
+      val wdata = port.out.wdata.peekInt().toInt
+      val wmask = port.out.wmask.peek().asBools.map(_.litToBoolean)
+      dut.clock.step()
+      if(addr == this.address) {
+        val chars = Seq.tabulate(4)(i => ((wdata >> i*8) & 0xFF).toChar)
+        if(we) {
+          //Write the bytes that are high to serial-out
+          for(i <- chars.indices) {
+            if (wmask(i)) {print(chars(i)); buf += chars(i)}
+          }
+        }
+        timescope {
+          port.in.ack.poke(true.B)
+        }
+      }
+
+    }
+  }
+
+  def getBuffer: ListBuffer[Char] = this.buf
+  def getBufString: String = this.buf.foldLeft(""){case (a,c) => s"$a$c"}
+}*/
+
+
+/*
+ * Function serving as the D$ interface
+ * @param data Data array holding D$ data. Initializes to an empty map if not given
+ * @param port Dmem port
+ * @param clock DUT clock
+ * @param conf Configuration
+ */
+/*def dcacheFunction(port: MemoryInterface, clock: Clock)(data: mutable.Map[Int, Byte])(implicit conf: Config): Unit = {
+  timescope {
+    port.in.ack.poke(true.B)
+    val we = port.out.we.peekBoolean()
+    val wmask = port.out.wmask.peek().asBools.map(_.litToBoolean)
+    val addr = port.out.addr.peekInt().toInt
+    val wdata = port.out.wdata.peekInt().toInt
+
+    if (we) {
+      for (i <- 0 until conf.WMASKLEN) {
+        if (wmask(i)) {
+          data(addr + i) = ((wdata >> i * 8) & 0xFF).toByte
+        }
+      }
+    } else { //read
+      var r = 0L
+      for (i <- 0 until conf.WMASKLEN) {
+        r |= (data.getOrElse(addr + i, 0.toByte) & 0xff) << 8 * i
+      }
+      port.in.rdata.poke(r & 0xffffffffL)
+    }
+    clock.step()
+  }
+}
+
+/**
+ * Function serving as the interface to the software serial port
+ * @param port Port being accessed
+ * @param clock Clock signal
+ * @param conf Configuration
+ */
+def softwareSerialPortFunction(port: MemoryInterface, clock: Clock)(implicit conf: Config): Unit = {
+  val we = port.out.we.peekBoolean()
+  val wdata = port.out.wdata.peekInt().toInt
+  val wmask = port.out.wmask.peek().asBools.map(_.litToBoolean)
+
+  val chars = Seq.tabulate(4)(i => ((wdata >> i*8) & 0xFF).toChar)
+  if(we) {
+    //Write the bytes that are high to serial-out
+    for (i <- chars.indices) {
+      if (wmask(i)) {
+        print(chars(i))/*; buf += chars(i)*/
+      }
+    }
+  }
+  timescope {
+    port.in.ack.poke(true.B)
+    clock.step()
+  }
+}*/

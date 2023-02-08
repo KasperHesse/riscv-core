@@ -1,3 +1,4 @@
+import chisel3.{Bool, RegNext}
 import core.Config
 
 package object utils {
@@ -20,4 +21,7 @@ package object utils {
   def mkPos(v: Long)(implicit conf: Config): BigInt = {
     BigInt(v) & ((BigInt(1) << conf.XLEN)-1)
   }
+
+  def risingEdge(x: Bool): Bool = x && !RegNext(x)
+  def fallingEdge(x: Bool): Bool = !x && RegNext(x)
 }

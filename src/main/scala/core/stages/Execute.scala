@@ -68,26 +68,34 @@ class Execute(implicit conf: Config) extends PipelineStage {
   val aluOut = alu.io.res
 
   //MEMORY MODULE CONNECTIONS
-  //TODO: Need a way of keeping req high in this stage, if ack isn't signaled in MEM stage
-  //Perhaps a register storing old values, using that as output in case a control signal is asserted?
-  val mask = Wire(Vec(conf.XLEN/8, Bool()))
+  val mask = Wire(UInt(conf.WMASKLEN.W))
+  val wdata = Wire(UInt(conf.XLEN.W))
   when(id.ctrl.memOp === Funct3.SB.U) {
-    mask := VecInit(UIntToOH(aluOut(1,0)).asBools)
-    io.mem.wdata := VecInit(Seq.fill(conf.WMASKLEN)(v2(7,0))).asUInt
+    mask := UIntToOH(aluOut(1,0))
+    wdata := VecInit(Seq.fill(conf.WMASKLEN)(v2(7,0))).asUInt
   } .elsewhen(id.ctrl.memOp === Funct3.SH.U) {
-    mask := VecInit(Mux(aluOut(1), "b1100".U, "b0011".U).asBools)
-    io.mem.wdata := VecInit(Seq.fill(conf.WMASKLEN/2)(v2(15,0))).asUInt
+    mask := Mux(aluOut(1), "b1100".U(4.W), "b0011".U(4.W))
+    wdata := VecInit(Seq.fill(conf.WMASKLEN/2)(v2(15,0))).asUInt
   } .otherwise { //SW
-    mask := VecInit("b1111".U.asBools)
-    io.mem.wdata := v2
+    mask := "b1111".U(conf.WMASKLEN.W)
+    wdata := v2
   }
   //Processing reads
   //Use an rmask? And then forward the rmask to the mem-stage for processing?
   //mask can be generated independently of
-  io.mem.addr := aluOut(conf.XLEN-1,2) ## 0.U(2.W) //Must zero out 2 LSB of memory access to use wmask correctly
-  io.mem.req := id.ctrl.memWrite | id.ctrl.memRead
-  io.mem.we := id.ctrl.memWrite
-  io.mem.wmask := mask.map(_ & id.ctrl.memWrite)
+
+  //Memory request information
+  val req = Wire(new MemoryRequest)
+  req.addr := aluOut(conf.XLEN-1,2) ## 0.U(2.W) //Must zero out 2 LSB of memory access to use wmask correctly
+  req.req := id.ctrl.memWrite | id.ctrl.memRead
+  req.we := id.ctrl.memWrite
+  req.wmask := mask & Fill(conf.WMASKLEN, id.ctrl.memWrite)
+  req.wdata := wdata
+
+  //Old memory request, to keep constant in case it is not acknowledged after 1 CC
+  val oldReq = RegNext(io.mem)
+  io.mem := Mux(io.hzd.stall, oldReq, req)
+
 
   //OUTPUTS
   //JAL and JALR require that PC+4 is written to regfile.
@@ -95,7 +103,7 @@ class Execute(implicit conf: Config) extends PipelineStage {
   //LUI requires that we add imm to 0
   io.memstage.res := Mux(id.ctrl.jump, id.pc + 4.U(conf.XLEN.W), aluOut)
   io.memstage.rd := id.rd
-  io.memstage.valid := id.valid
+  io.memstage.valid := id.valid && !io.hzd.stall
 
   //Forward control signals to MEM stage
   io.memstage.ctrl.we := id.ctrl.we

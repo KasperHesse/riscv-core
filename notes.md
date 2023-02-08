@@ -7,12 +7,42 @@ A generic RV32I core, that should later be parameterized to also support RV64 an
     (eg delayed memory load), we don't propagate from ID into EX
   - Use of stall/flush are for special circumstances (e.g. load-use hazard). If delayed memory load, that should
     be resolvable without manual intervention
+- Would be nice if all signals propagated forward together (instruction stored in IF/ID pipeline reg)
+  - In current impl, requires double-buffering of pc
 - Stall IF,ID,EX if memory load/store operation does not process in one clock cycle
 - Send NOPs and keep PC constant if new instruction is not fetched in one clock cycle
 - Implement trap handler and simple traps (exit, print)
   - Add extra signal `trap` which is high when trapped. When trapping, if `mcause` contains a given value (TBD)
     we exit simulation early.
   - print-trap should not be in software, but should be a trap handler at predefined memory location.
+
+Current problem: io.dmem.in.ack is combinationally tied to io.imem.out.addr through the hazard detection module
+that stalls the IF stage. This breaks ChiselTest.
+- Potential fix. When ID stage is stalled, switch to operating on instruction saved in register instead of 
+  value received from I$. This keeps output correct.
+- When ID is de-stalled, it should send out stalled instruction on that same CC, take instruction from I$ 
+  on next CC
+
+cycle 0: Instruction A enters ID stage
+cycle 1: Instruction B enters. Halfway through, ID.stall is asserted
+cycle 2: Instruction B is in register, flag has been set high. ID.stall is still asserted
+cycle 3: --||--
+cycle 4: Instrutction B is in register, flag is still high. ID.stall is deasserted at some point
+cycle 5: Instruction C enters from I$. Flag has been set low
+  - flagReg = RegNext(io.hzd.stall)
+
+In IF stage
+cycle 1: Instruction C request is launched. Stall arrives
+cycle 2: Instruction C request is kept constant instead of moving on to instruction D
+cycle 3: --||--
+cycle 4: IF.stall is deasserted. Instruction C request is kept constant
+cycle 5: Instruction C enters from I$. Instruction D request is launched.
+
+This would decouple the IMEM address and DMEM ack
+
+Current problem: With two items forked out to handle dmem requests, things get messy
+- Instead of registering multiple modules, register functions with the DmemDriver.
+  If the address matches their address, they get to handle the port for as long as they wish
 
 # Stages
 ## core.stages.Fetch

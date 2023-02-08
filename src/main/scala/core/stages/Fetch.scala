@@ -16,14 +16,13 @@ class Fetch(implicit conf: Config) extends PipelineStage {
     }
     val hzd = new FetchHazardIO
   })
-  //Shorthand for NOP instruction if flushed/stalled
-  val nop = ItypeInstruction(imm=0, rs1=0, rd=0, funct3=Funct3.ADDI, op=Opcode.OP_IMM).asUInt
 
+  val updatePC = Wire(Bool())
   /** Next value of PC*/
   val PCnext = Wire(UInt(conf.XLEN.W))
   /** Program counter */
-  val PC = RegEnable(next=PCnext, init=mkPos(conf.pcReset).U(conf.XLEN.W), enable=io.mem.in.ack) //may also need !io.hzd.stall for multi-cycle stalls?
-  /** Memory request flag */
+  val PC = RegEnable(PCnext, mkPos(conf.pcReset).U(conf.XLEN.W), updatePC) //may also need !io.hzd.stall for multi-cycle stalls?
+  /** Memory request signal */
   val req = WireDefault(true.B)
 
   //HANDLE LOAD PC WHILE WAITING ON ACK
@@ -37,33 +36,42 @@ class Fetch(implicit conf: Config) extends PipelineStage {
     delayedLoadPC := false.B
   }
 
+  //HANDLE ACK WHILE STALLED
+  //Storing the most recently sampled instruction in case of stall
+  val sampledInstr = Reg(UInt(conf.XLEN.W))
+  val hasSampledInstr = RegInit(false.B)
+  when(risingEdge(io.hzd.stall && io.mem.in.ack) && !hasSampledInstr) { //Set
+    hasSampledInstr := true.B
+    sampledInstr := io.mem.in.rdata
+  } .elsewhen(hasSampledInstr && io.id.valid) { //Reset
+    hasSampledInstr := false.B
+  }
+
   //PC UPDATE LOGIC
   //when ack && load -> set to newPC
   //when ack && delayed -> set to delayedPC
-  //when stall && ack -> keep at PC
-  //when stall && !ack -> PC+4. Note that PC is not updated at this point
-  //otherwise -> pc + 4
+  //when stall && ack && !hasSampled -> set to PC+4
+  //when stall && ack && hasSampled -> set to PC
+  //default -> pc + 4
   PCnext := MuxCase(PC + 4.U, Seq(
     (io.ctrl.loadPC && io.mem.in.ack, io.ctrl.newPC),
     (delayedLoadPC && io.mem.in.ack, delayedNewPC),
-    (io.hzd.stall && io.mem.in.ack, PC)
+    (fallingEdge(hasSampledInstr), PC)
   ))
 
   //OUTPUT LOGIC
-  //Storing the most recently sampled instruction in case something goes wrong
-  val sampledInstr = RegNext(io.mem.in.rdata)
-  val addr = Mux(!io.mem.in.ack, PC, PCnext)
+  val addr = Mux(io.mem.in.ack || hasSampledInstr, PCnext, PC)
+  io.id.instr := Mux(hasSampledInstr, sampledInstr, io.mem.in.rdata)
+  updatePC := !(io.hzd.stall) && (io.mem.in.ack || hasSampledInstr)
+  io.id.valid := !(io.hzd.flush || io.hzd.stall || delayedLoadPC) && (io.mem.in.ack || hasSampledInstr)
 
-  io.id.instr := io.mem.in.rdata
-  io.id.valid := !(io.hzd.flush || !io.mem.in.ack || delayedLoadPC)
-
-  io.id.pc := addr
+  io.id.pc := Mux(io.hzd.stall || hasSampledInstr, PC, addr)
   io.mem.out.addr := addr
-  io.mem.out.req := req //for now, always requesting new instructions
+  io.mem.out.req := req
 
   //Fetch stage never writes to memory
   io.mem.out.wdata := 0.U
   io.mem.out.we := false.B
-  io.mem.out.wmask := VecInit(0.U(conf.WMASKLEN.W).asBools)
+  io.mem.out.wmask := 0.U
 
 }
