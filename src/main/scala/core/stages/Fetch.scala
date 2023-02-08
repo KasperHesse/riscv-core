@@ -16,14 +16,11 @@ class Fetch(implicit conf: Config) extends PipelineStage {
     }
     val hzd = new FetchHazardIO
   })
-  //Shorthand for NOP instruction if flushed/stalled
-  val nop = ItypeInstruction(imm=0, rs1=0, rd=0, funct3=Funct3.ADDI, op=Opcode.OP_IMM).asUInt
-
   /** Next value of PC*/
   val PCnext = Wire(UInt(conf.XLEN.W))
   /** Program counter */
-  val PC = RegEnable(next=PCnext, init=mkPos(conf.pcReset).U(conf.XLEN.W), enable=io.mem.in.ack) //may also need !io.hzd.stall for multi-cycle stalls?
-  /** Memory request flag */
+  val PC = RegEnable(next=PCnext, init=mkPos(conf.pcReset).U(conf.XLEN.W), enable=io.mem.in.ack && !io.hzd.stall) //may also need !io.hzd.stall for multi-cycle stalls?
+  /** Memory request signal */
   val req = WireDefault(true.B)
 
   //HANDLE LOAD PC WHILE WAITING ON ACK
@@ -40,13 +37,11 @@ class Fetch(implicit conf: Config) extends PipelineStage {
   //PC UPDATE LOGIC
   //when ack && load -> set to newPC
   //when ack && delayed -> set to delayedPC
-  //when stall && ack -> keep at PC
-  //when stall && !ack -> PC+4. Note that PC is not updated at this point
+  //when stall -> PC+4. However, PC is not updated
   //otherwise -> pc + 4
   PCnext := MuxCase(PC + 4.U, Seq(
     (io.ctrl.loadPC && io.mem.in.ack, io.ctrl.newPC),
-    (delayedLoadPC && io.mem.in.ack, delayedNewPC),
-    (io.hzd.stall && io.mem.in.ack, PC)
+    (delayedLoadPC && io.mem.in.ack, delayedNewPC)
   ))
 
   //OUTPUT LOGIC
@@ -64,6 +59,6 @@ class Fetch(implicit conf: Config) extends PipelineStage {
   //Fetch stage never writes to memory
   io.mem.out.wdata := 0.U
   io.mem.out.we := false.B
-  io.mem.out.wmask := VecInit(0.U(conf.WMASKLEN.W).asBools)
+  io.mem.out.wmask := 0.U
 
 }

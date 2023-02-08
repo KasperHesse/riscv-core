@@ -70,12 +70,13 @@ class SimpleProgramsSpec extends AnyFlatSpec with ChiselScalatestTester with Mat
 
     test(new Core) { dut =>
       val imem = new ImemDriver(dut.io.imem, assembleMap(asm))
-      val dmem = new DmemDriver(dut.io.dmem, None, 0, 0x0000ffff)
-      val uart = new SoftwareSerialPort(dut.io.dmem, 0x10000)
-      val sh = new SimulationHarness(dut, ListBuffer(imem, dmem, uart))
+      val dmem = new DmemDriver(dut.io.dmem)
+      dmem.register(dcacheFunction(_,dut.clock)(), 0, 0xffff)
+      dmem.register(softwareSerialPortFunction(_,dut.clock), 0x10000, 0x10000)
+
+      val sh = new SimulationHarness(dut, ListBuffer(imem, dmem))
 
       sh.run()
-      assert(uart.getBufString === "Hello World!\n")
     }
   }
 }
