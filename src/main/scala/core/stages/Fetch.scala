@@ -50,8 +50,7 @@ class Fetch(implicit conf: Config) extends PipelineStage {
   //PC UPDATE LOGIC
   //when ack && load -> set to newPC
   //when ack && delayed -> set to delayedPC
-  //when stall && ack && !hasSampled -> set to PC+4
-  //when stall && ack && hasSampled -> set to PC
+  //on falling edge of hasSampledInstr (coming out of stall) -> keep PC constant
   //default -> pc + 4
   PCnext := MuxCase(PC + 4.U, Seq(
     (io.ctrl.loadPC && io.mem.in.ack, io.ctrl.newPC),

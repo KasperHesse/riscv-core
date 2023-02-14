@@ -75,6 +75,7 @@ class SimpleProgramsSpec extends AnyFlatSpec with ChiselScalatestTester with Mat
 
       val sh = new SimulationHarness(dut, ListBuffer(imem, dmem))
       sh.run()
+      //assert(uart.getBufString === "Hello World!\n")
     }
   }
 }

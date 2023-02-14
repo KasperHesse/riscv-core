@@ -59,7 +59,7 @@ class HazardDetection extends Module {
 
   //Load-use hazard
   //Since we don't forward result from memory stage,
-  //we flush ID (to make it invalid) and stall IF (to keep mem-access constant)
+  // we flush ID (to make it invalid) and stall IF (to keep mem-access constant)
   //Only when RD  != 0
   when(io.EX.memRead && io.EX.rd =/= 0.U && (io.ID.rs1 === io.EX.rd || io.ID.rs2 === io.EX.rd)) {
     io.ID.flush := true.B
