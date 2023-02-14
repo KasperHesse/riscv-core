@@ -155,7 +155,7 @@ package object core {
     override def drive(): Unit = {
       val addr = port.out.addr.peekInt().toInt
       val d = scala.util.Random.nextInt(maxDelay) + 1
-      println(s"Access to $addr, ack after $d")
+//      println(s"Access to $addr, ack after $d")
       for (_ <- 1 to d) {
         clock.step()
         port.in.ack.poke(false.B)

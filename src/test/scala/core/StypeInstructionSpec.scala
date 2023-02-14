@@ -5,7 +5,7 @@ import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.must.Matchers
 
-class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
+class StypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
   behavior of "Memory instructions"
   
   implicit val conf: Config = defaultConf
