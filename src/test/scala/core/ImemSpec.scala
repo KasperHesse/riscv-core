@@ -22,7 +22,7 @@ class ImemSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers{
 
     test(new Core).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
       val imem = MemAgent(dut.io.imem, Seq(
-        new IcacheWithDelay(dut.io.imem, dut.clock, 0, 0xffff, 3)(assembleMap(asm))
+        new IcacheWithDelay(dut.io.imem, dut.clock, 0, 0xffff, 2, 4)(assembleMap(asm))
       ))
       val sh = new SimulationHarness(dut, ListBuffer(imem))
       sh.run()
@@ -48,7 +48,7 @@ class ImemSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers{
 
     test(new Core).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
       val imem = MemAgent(dut.io.imem, Seq(
-        new IcacheWithDelay(dut.io.imem, dut.clock, 0, 0xffff, 3)(assembleMap(asm))
+        new IcacheWithDelay(dut.io.imem, dut.clock, 0, 0xffff, 2, 4)(assembleMap(asm))
       ))
       val sh = new SimulationHarness(dut, ListBuffer(imem))
       sh.run()

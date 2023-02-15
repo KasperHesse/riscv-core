@@ -24,10 +24,7 @@ class Decode(implicit conf: Config) extends PipelineStage {
 
   /** Pipeline register */
   val fetch = RegEnable(io.fetch, 0.U(io.fetch.getWidth.W).asTypeOf(io.fetch), !io.hzd.stall)
-  val stallReg = RegNext(io.hzd.stall)
-
-  //Instruction is ordinarily sampled from I$. When stalled, it is taken from pipeline register instead
-  val instr = Mux(stallReg, fetch.instr, io.fetch.instr)
+  val instr = io.fetch.instr
 
   //REGISTERS
   /** Register file. Register 0 is redundant but makes things easier to implement */

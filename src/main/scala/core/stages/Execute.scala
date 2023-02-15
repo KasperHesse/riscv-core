@@ -26,12 +26,20 @@ class Execute(implicit conf: Config) extends PipelineStage {
     val hzd = new ExecuteHazardIO
   })
 
-  /** Pipeline register */
-  val id = RegEnable(io.id, 0.U(io.id.getWidth.W).asTypeOf(io.id), !io.hzd.stall)
-
   //MODULES
   val alu = Module(new ALU)
   val fwd = Module(new ForwardingUnit)
+
+  /** Pipeline register */
+  val id = RegInit(0.U(io.id.getWidth.W).asTypeOf(io.id))
+  when (!io.hzd.stall) {
+    id := io.id
+  } .otherwise {
+    //When stalled, update values in pipeline register if they pass by on forwarding paths
+    id.v1 := fwd.io.v1
+    id.v2 := fwd.io.v2
+  }
+
   fwd.io.IDrs1 := id.rs1
   fwd.io.IDrs2 := id.rs2
   fwd.io.IDv1 := id.v1
@@ -87,7 +95,7 @@ class Execute(implicit conf: Config) extends PipelineStage {
   //Memory request information
   val req = Wire(new MemoryRequest)
   req.addr := aluOut(conf.XLEN-1,2) ## 0.U(2.W) //Must zero out 2 LSB of memory access to use wmask correctly
-  req.req := id.ctrl.memWrite | id.ctrl.memRead
+  req.req := (id.ctrl.memWrite | id.ctrl.memRead) & id.valid
   req.we := id.ctrl.memWrite
   req.wmask := mask & Fill(conf.WMASKLEN, id.ctrl.memWrite)
   req.wdata := wdata
@@ -95,7 +103,7 @@ class Execute(implicit conf: Config) extends PipelineStage {
   //Old memory request, to keep constant in case it is not acknowledged after 1 CC
   val oldReq = RegNext(io.mem)
   io.mem := Mux(io.hzd.stall, oldReq, req)
-
+//  io.mem := req
 
   //OUTPUTS
   //JAL and JALR require that PC+4 is written to regfile.

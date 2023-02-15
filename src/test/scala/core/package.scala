@@ -5,6 +5,7 @@ import java.io.{BufferedWriter, FileInputStream, FileWriter}
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.sys.process._
+import scala.util.Random
 
 package object core {
 
@@ -63,24 +64,35 @@ package object core {
     def drive(): Unit
   }
 
-  /**
-   * The DcacheDriver is a PortDriver attached to the data memory bus of the DUT
-   * @param port The port on which the PortDriver acts
-   * @param clock DUT clock
-   * @param low Low memory address that is cached
-   * @param high High memory address that is cached
-   * @param data Initial data mapping. Defaults to an empty memory
-   */
-  class Dcache(port: MemoryInterface, clock: Clock, low: Int = 0, high: Int = 0xffff)
-              (data: mutable.Map[Int,Byte] = mutable.Map[Int,Byte]())
-              (implicit conf: Config) extends PortDriver(port, low, high) {
+
+
+    /**
+     * The DcacheWithDelay is a PortDriver attached to the data memory bus of the DUT, acting as the data cache of the system
+     * @param port The port on which the PortDriver acts
+     * @param clock DUT clock
+     * @param low Low memory address that is cached
+     * @param high High memory address that is cached
+     * @param minDelay minimum delay before responding to memory requests. Must be >=1
+     * @param maxDelay Maximum delay before responding to memory requests. Must be >=minDelay
+     * @param data Initial data mapping. Defaults to an empty memory
+     */
+  class DcacheWithDelay(port: MemoryInterface, clock: Clock, low: Int = 0, high: Int = 0xffff, minDelay: Int, maxDelay: Int)
+                       (data: mutable.Map[Int, Byte] = mutable.Map[Int,Byte]())
+                       (implicit conf: Config) extends PortDriver(port, low, high) {
+
+    require(minDelay > 0, s"Dcache cannot acknowledge on same cycle as request. minDelay must be >0, is $minDelay")
+    require(maxDelay >= minDelay, s"Dcache maxDelay must be >= minDelay ($minDelay), is $maxDelay")
     override def drive(): Unit = {
       val we = port.out.we.peekBoolean()
       val wmask = port.out.wmask.peek().asBools.map(_.litToBoolean)
       val addr = port.out.addr.peekInt().toInt
       val wdata = port.out.wdata.peekInt().toInt
 
-      clock.step()
+      val d = Random.between(minDelay, maxDelay+1)
+      for(_ <- 1 to d) {
+        clock.step()
+        port.in.ack.poke(false.B)
+      }
       port.in.ack.poke(true.B)
       if (we) {
         for (i <- 0 until conf.WMASKLEN) {
@@ -97,6 +109,18 @@ package object core {
       }
     }
   }
+
+  /**
+   * A variant of [[DcacheWithDelay]] that always responds to requests on the subsequent clock cycle
+   * @param port The port on which the PortDriver acts
+   * @param clock DUT clock
+   * @param low Low memory address that is cached
+   * @param high High memory address that is cached
+   * @param data Initial data mapping. Defaults to an empty memory
+   */
+  class Dcache(port: MemoryInterface, clock: Clock, low: Int = 0, high: Int = 0xffff)
+              (data: mutable.Map[Int, Byte] = mutable.Map[Int,Byte]())
+              (implicit conf: Config) extends DcacheWithDelay(port, clock, low, high, 1, 1)(data)
 
   object Dcache {
     def apply(port: MemoryInterface, clock: Clock)(implicit conf: Config): Seq[PortDriver] = {
@@ -142,19 +166,21 @@ package object core {
    * @param clock DUT clock
    * @param low Low memory address that is cached
    * @param high High memory address that is cached
+   * @param minDelay Minimum delay before ack is signalled
    * @param maxDelay Maximum delay before ack is signalled
    * @param instrs Instruction mapping
    * @param conf
    */
-  class IcacheWithDelay(port: MemoryInterface, clock: Clock, low: Int, high: Int, maxDelay: Int)
+  class IcacheWithDelay(port: MemoryInterface, clock: Clock, low: Int, high: Int, minDelay: Int, maxDelay: Int)
                        (instrs: Map[Int, Int])
                        (implicit conf: Config) extends PortDriver(port, low, high) {
-    require(maxDelay > 0, s"ImemDriver cannot acknowledge on same cycle as request, maxDelay must be >0, is $maxDelay")
+    require(minDelay > 0, s"ICache cannot acknowledge on same cycle as request. minDelay must be >0, is $minDelay")
+    require(maxDelay >= minDelay, s"ICache maxDelay must be >= minDelay ($minDelay), is $maxDelay")
 
     val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM).litValue.toInt
     override def drive(): Unit = {
       val addr = port.out.addr.peekInt().toInt
-      val d = scala.util.Random.nextInt(maxDelay) + 1
+      val d = Random.between(minDelay, maxDelay+1)
 //      println(s"Access to $addr, ack after $d")
       for (_ <- 1 to d) {
         clock.step()
@@ -162,6 +188,10 @@ package object core {
       }
       port.in.ack.poke(true.B)
       port.in.rdata.poke(instrs.getOrElse(addr, nop).toLong & 0xffff_ffffL)
+    }
+
+    def genRand(minl: Int, maxl: Int): Int = {
+      (if (minl == maxl) {0} else {scala.util.Random.nextInt(maxl-minl+1)}) + minl
     }
   }
 
@@ -177,12 +207,14 @@ package object core {
    */
   class Icache(port: MemoryInterface, clock: Clock, low: Int, high: Int)
               (instrs: Map[Int, Int])
-              (implicit conf: Config) extends IcacheWithDelay(port, clock, low, high, 1)(instrs)
+              (implicit conf: Config) extends IcacheWithDelay(port, clock, low, high, 1, 1)(instrs)
 
   object Icache {
     def apply(port: MemoryInterface, clock: Clock, instrs: Map[Int, Int])(implicit conf: Config): Seq[Icache] = {
       Seq(new Icache(port, clock, 0, 0xffff)(instrs))
     }
+
+    def apply(port: MemoryInterface, clock: Clock, asm: String)(implicit conf: Config): Seq[Icache] = this(port, clock, assembleMap(asm))
   }
 
   /**

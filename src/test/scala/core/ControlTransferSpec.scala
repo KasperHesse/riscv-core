@@ -47,7 +47,7 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
         |L3: addi x5, x0 ,5
         |""".stripMargin
 
-    test(new Core()) {dut =>
+    test(new Core) {dut =>
       val sh = SimulationHarness(dut, assembleMap(asm))
       sh.run()
       expectReg(dut, 1, 28)
@@ -74,7 +74,7 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
         |addi x4, x0, 40
         |L2: nop
         |""".stripMargin
-    test(new Core()(defaultConf)) {dut =>
+    test(new Core) {dut =>
       val sh = SimulationHarness(dut, assembleMap(asm))
       sh.run()
       expectReg(dut, 1, 12)
@@ -121,7 +121,7 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
         |L2: nop
         |""".stripMargin
 
-    test(new Core()(defaultConf)) {dut =>
+    test(new Core) {dut =>
       val sh = SimulationHarness(dut, assembleMap(asm))
       sh.run()
       expectReg(dut, 2, 15)
@@ -141,7 +141,7 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
         |L2: nop
         |""".stripMargin
 
-    test(new Core()) {dut =>
+    test(new Core) {dut =>
       val sh = SimulationHarness(dut, assembleMap(asm))
       sh.run()
       expectReg(dut, 2, 15)

@@ -22,8 +22,7 @@ class ExecuteHazardIO extends Bundle {
 }
 
 class MemoryHazardIO extends Bundle {
-  val memRead = Output(Bool())
-  val memWrite = Output(Bool())
+  val memOp = Output(Bool())
   val ack = Output(Bool())
   val stall = Input(Bool())
 }
@@ -49,7 +48,7 @@ class HazardDetection extends Module {
   //Delayed memory response
   //If a memory operation is not ACK'd on cycle after issuing it, IF, ID and EX stages must be stalled.
   //Must be kept stalled until ACK arrives
-  when (io.MEM.memRead && !io.MEM.ack) {
+  when (io.MEM.memOp && !io.MEM.ack) {
     io.IF.stall := true.B
     io.ID.stall := true.B
     io.EX.stall := true.B

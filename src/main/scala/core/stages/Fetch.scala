@@ -37,7 +37,7 @@ class Fetch(implicit conf: Config) extends PipelineStage {
   }
 
   //HANDLE ACK WHILE STALLED
-  //Storing the most recently sampled instruction in case of stall
+  //Storing the most recent instruction in case of stall
   val sampledInstr = Reg(UInt(conf.XLEN.W))
   val hasSampledInstr = RegInit(false.B)
   when(risingEdge(io.hzd.stall && io.mem.in.ack) && !hasSampledInstr) { //Set
@@ -47,24 +47,26 @@ class Fetch(implicit conf: Config) extends PipelineStage {
     hasSampledInstr := false.B
   }
 
-  //PC UPDATE LOGIC
-  //when ack && load -> set to newPC
-  //when ack && delayed -> set to delayedPC
-  //on falling edge of hasSampledInstr (coming out of stall) -> keep PC constant
-  //default -> pc + 4
+  //Next PC logic
   PCnext := MuxCase(PC + 4.U, Seq(
     (io.ctrl.loadPC && io.mem.in.ack, io.ctrl.newPC),
-    (delayedLoadPC && io.mem.in.ack, delayedNewPC),
-    (fallingEdge(hasSampledInstr), PC)
+    (delayedLoadPC && io.mem.in.ack, delayedNewPC)
   ))
 
   //OUTPUT LOGIC
+  //When acknowledged, issue a request for next instruction
+  //When sampled instruction is stored while stalled, this also represents that we wish to pre-load next instruction
   val addr = Mux(io.mem.in.ack || hasSampledInstr, PCnext, PC)
   io.id.instr := Mux(hasSampledInstr, sampledInstr, io.mem.in.rdata)
+
+  //updatePC has some logic in common with io.id.valid, but controls when to register new value of PC.
+  //Sometimes, we wish to update value of PC without signalling valid (e.g. when flushing due to loadPC)
   updatePC := !(io.hzd.stall) && (io.mem.in.ack || hasSampledInstr)
   io.id.valid := !(io.hzd.flush || io.hzd.stall || delayedLoadPC) && (io.mem.in.ack || hasSampledInstr)
 
-  io.id.pc := Mux(io.hzd.stall || hasSampledInstr, PC, addr)
+  //Does not follow addr exactly, since addr is allowed to increment if ack arrives while stalled.
+  //In that case, PC value to ID stage should still be kept constant
+  io.id.pc := Mux(io.hzd.stall, PC, addr)
   io.mem.out.addr := addr
   io.mem.out.req := req
 
@@ -72,5 +74,4 @@ class Fetch(implicit conf: Config) extends PipelineStage {
   io.mem.out.wdata := 0.U
   io.mem.out.we := false.B
   io.mem.out.wmask := 0.U
-
 }

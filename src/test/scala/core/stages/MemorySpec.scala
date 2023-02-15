@@ -25,7 +25,7 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
       dut.clock.step()
       dut.io.wb.valid.expect(false.B)
 
-      dut.io.hzd.stall.poke(true.B)
+      dut.io.hzd.stall.poke(false.B)
       dut.clock.step()
       dut.io.wb.valid.expect(false.B)
 

@@ -50,9 +50,6 @@ class Memory(implicit conf: Config) extends PipelineStage {
     }
   }
 
-  //TODO Raise stall if ack is not signalled when ex.ctrl.memRead==1
-  //Should also not accept next instruction while stalled
-
   //OUTPUTS
   //Outputs to WB stage
   io.wb.res := Mux(ex.ctrl.memRead, rdata, ex.res)
@@ -66,7 +63,6 @@ class Memory(implicit conf: Config) extends PipelineStage {
   io.fwd.wdata := ex.res
 
   //Control signals
-  io.hzd.memRead := ex.ctrl.memRead
-  io.hzd.memWrite := ex.ctrl.memWrite
+  io.hzd.memOp := ex.ctrl.memWrite || ex.ctrl.memRead
   io.hzd.ack := io.mem.ack
 }
