@@ -109,7 +109,7 @@ class MemoryRequest(implicit conf: Config) extends Bundle {
   /** Write-enable flag */
   val we = Bool()
   /** Write mask for write-operations. Only bytes associated with 1's in the mask are written to memory */
-  val wmask = Vec(conf.XLEN/8, Bool())
+  val wmask = UInt((conf.XLEN/8).W)
 }
 
 class MemoryResponse(implicit conf: Config) extends Bundle {
