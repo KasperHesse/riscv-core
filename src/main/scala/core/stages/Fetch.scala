@@ -16,7 +16,7 @@ class Fetch(implicit conf: Config) extends PipelineStage {
     }
     val hzd = new FetchHazardIO
   })
-
+  //Flag pulled high when PC value should be updated
   val updatePC = Wire(Bool())
   /** Next value of PC*/
   val PCnext = Wire(UInt(conf.XLEN.W))
@@ -66,7 +66,8 @@ class Fetch(implicit conf: Config) extends PipelineStage {
 
   //Does not follow addr exactly, since addr is allowed to increment if ack arrives while stalled.
   //In that case, PC value to ID stage should still be kept constant
-  io.id.pc := Mux(io.hzd.stall, PC, addr)
+  //Since IF->ID takes at least two clock cycles (one to req, one to ack), value of PC sent to ID stage is delayed by one CC.
+  io.id.pc := RegNext(Mux(io.hzd.stall, PC, addr))
   io.mem.out.addr := addr
   io.mem.out.req := req
 

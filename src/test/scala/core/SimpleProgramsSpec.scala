@@ -1,6 +1,6 @@
 package core
 
-import chiseltest.ChiselScalatestTester
+import chiseltest.{ChiselScalatestTester, WriteVcdAnnotation}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.must.Matchers
 
@@ -20,16 +20,24 @@ class SimpleProgramsSpec extends AnyFlatSpec with ChiselScalatestTester with Mat
         |L1: add x2, x1, x2
         |addi x1, x1, 1
         |blt x1, x3, L1
+        |addi x4, x4, 1
+        |addi x5, x5, 1
+        |addi x6, x6, 1
         |""".stripMargin
+
 
     test(new Core) {dut =>
       val sh = SimulationHarness(dut, assembleMap(asm))
-      sh.setTimeout(500)
+      //Each loop of add,addi,blt takes 5 clock cycles since branches are always mispredicted and pipeline must be flushed
+      sh.setTimeout(600)
       sh.run()
 
       expectReg(dut, 1, 101)
       expectReg(dut, 2, 5050)
       expectReg(dut, 3, 101)
+      expectReg(dut, 4, 1)
+      expectReg(dut, 5, 1)
+      expectReg(dut, 6, 1)
     }
   }
 
