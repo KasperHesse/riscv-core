@@ -118,7 +118,10 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
         |addi x4, x0, 1
         |jal L2
         |L1: addi x3, x0, 2
-        |L2: nop
+        |addi x5, x0, 5
+        |addi x6, x0, 6
+        |L2: addi x7, x0, 7
+        |addi x8, x0, 8
         |""".stripMargin
 
     test(new Core) {dut =>
@@ -127,6 +130,10 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
       expectReg(dut, 2, 15)
       expectReg(dut, 3, 2)
       expectReg(dut, 4, 0)
+      expectReg(dut, 5, 5)
+      expectReg(dut, 6, 6)
+      expectReg(dut, 7, 7)
+      expectReg(dut, 8, 8)
     }
   }
 
