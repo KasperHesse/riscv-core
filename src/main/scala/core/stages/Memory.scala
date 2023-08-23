@@ -63,6 +63,6 @@ class Memory(implicit conf: Config) extends PipelineStage {
   io.fwd.wdata := ex.res
 
   //Control signals
-  io.hzd.memOp := ex.ctrl.memWrite || ex.ctrl.memRead
+  io.hzd.memOp := (ex.ctrl.memWrite || ex.ctrl.memRead) && ex.valid
   io.hzd.ack := io.mem.ack
 }
