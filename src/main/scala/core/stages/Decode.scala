@@ -24,7 +24,7 @@ class Decode(implicit conf: Config) extends PipelineStage {
 
   /** Pipeline register */
   val fetch = RegEnable(io.fetch, 0.U(io.fetch.getWidth.W).asTypeOf(io.fetch), !io.hzd.stall)
-  val instr = io.fetch.instr //Instruction is sampled in fetch stage and not by this register
+  val instr = fetch.instr
 
   //REGISTERS
   /** Register file. Register 0 is redundant but makes things easier to implement */
@@ -78,7 +78,7 @@ class Decode(implicit conf: Config) extends PipelineStage {
   io.ex.pcNextSrc := op === Opcode.JALR
 
   //CONTROL SIGNALS AND HAZARD AVOIDANCE
-  val valid = io.fetch.valid && !io.hzd.flush && !io.hzd.stall
+  val valid = fetch.valid && !io.hzd.flush && !io.hzd.stall
   //All control signals are AND with id.valid to ensure nothing bad happens (functionally a NOP)
   //To execute stage
   io.ex.valid := valid

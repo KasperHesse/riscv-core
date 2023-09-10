@@ -24,13 +24,12 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
       }
       for(i <- 0 until 5) {
         val addr = out.addr.peekInt().toInt
-        assert (addr === conf.pcReset + 4*i, s"i=$i")
-        dut.io.id.pc.expect(conf.pcReset + 4*i, s"i=$i")
+        out.addr.expect(conf.pcReset + 4*i, s"i=$i")
         dut.clock.step()
         in.ack.poke(true.B)
         in.rdata.poke((i+1).U)
         dut.io.id.instr.expect((i+1).U)
-        dut.io.id.pc.expect(conf.pcReset + 4*(i+1))
+        dut.io.id.pc.expect(conf.pcReset + 4*i)
       }
     }
   }
@@ -89,7 +88,7 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
     - When not ack, addr is driven by PC
     - When ack, addr is driven by pcNext
      */
-    test(new Fetch) {dut =>
+    test(new Fetch).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
       val in = dut.io.mem.in
       val out = dut.io.mem.out
       in.ack.poke(false.B)
@@ -104,11 +103,11 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
 
       //Attempt to load new PC
       dut.io.ctrl.loadPC.poke(true.B)
-      dut.io.ctrl.newPC.poke(100)
+      dut.io.ctrl.newPC.poke(16)
       dut.io.hzd.flush.poke(true.B)
       dut.clock.step()
 
-      //Address being accessed shouldn't have changed
+      //Address being accessed shouldn't have changed since we didn't ack the req
       dut.io.ctrl.loadPC.poke(false.B)
       dut.io.hzd.flush.poke(false.B)
       out.addr.expect(conf.pcReset)
@@ -122,76 +121,238 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
       in.ack.poke(true.B)
       dut.io.id.instr.expect(512) //NOP
       dut.io.id.valid.expect(false.B)
-      dut.io.id.pc.expect(100) //because next instruction is fetched from PC 100
+      dut.io.id.pc.expect(0) //Flushed instruction was from pc 0
+      out.addr.expect(16.U)
 
       dut.clock.step()
-      dut.io.id.instr.expect(512)
+      in.rdata.poke(1024)
+      dut.io.id.instr.expect(1024)
       dut.io.id.valid.expect(true.B)
-      out.addr.expect(104)
+      dut.io.id.pc.expect(16.U)
+      out.addr.expect(20) //New instruction is from PC 16
     }
   }
 
-  it should "keep PC constant while stalled" in {
-    /*
-    Scenario:
-    Dmem is stalled waiting on load. This also stalls EX, ID and IF stages
-    IF stage should keep PC constant, even if in.ack is true
-     */
+  /*
+    Scenario: Instruction addressed is not present in I$. While waiting on ack, a stall arrives
+    Three outcomes
+    1) Stall is de-asserted before ack
+    2) Ack is asserted while stalling
+    3) Ack is asserted on same CC as stall is deasserted
+ */
+  /** Common preamble for the tests verifying stall/ack behavior
+  Leaves the DUT in a state where ack=false, stall=true, in.rdata=9, out.addr=12, id.pc=12 and no sampled instruction
+  */
+  def stallPreamble(dut: Fetch): Unit = {
+    //Setup
+    dut.io.mem.in.ack.poke(false.B)
+    dut.io.mem.in.rdata.poke(0.U)
+    dut.io.mem.out.addr.expect(conf.pcReset.U)
+    dut.clock.step()
+
+    //Once ack is signalled, addr should increment
+    dut.io.mem.in.ack.poke(true.B)
+    for(i <- 0 until 12 by 4) {
+      dut.io.mem.in.rdata.poke((i+1).U)
+      dut.io.mem.out.addr.expect((4+i).U)
+      dut.io.id.valid.expect(true.B)
+      dut.io.id.instr.expect((i+1).U)
+      dut.io.id.pc.expect(i.U)
+      dut.clock.step()
+    }
+    //At this point
+    //rdata = 9
+    //addr = 12
+    //pc = 12
+
+    //Once ack is deasserted, instruction should be invalid and address should not change
+    //Since ack was not received, we're stll trying to access address 12
+    dut.io.mem.in.ack.poke(false.B)
+    for (_ <- 0 until 4) {
+      dut.io.mem.out.addr.expect(12.U)
+      dut.io.id.valid.expect(false.B)
+      dut.io.id.pc.expect(12.U)
+      dut.io.id.instr.expect(9.U)
+      dut.clock.step()
+    }
+
+    //If stalled, address should not change
+    dut.io.hzd.stall.poke(true.B)
+    for (_ <- 0 until 3) {
+      dut.io.mem.out.addr.expect(12.U)
+      dut.io.id.valid.expect(false.B)
+      dut.io.id.pc.expect(12.U)
+      dut.io.id.instr.expect(9.U)
+      dut.clock.step()
+    }
+  }
+
+  //Scenario 1: Stall is asserted and de-asserted while ack is low
+  it should "handle stall being toggled while waiting on ack" in {
     test(new Fetch) { dut =>
-      //First cycle, ack is always low
-      dut.io.mem.in.ack.poke(false.B)
-      dut.io.mem.out.addr.expect(0.U)
+      stallPreamble(dut)
+      //Once stall is deasserted, since ack hasn't been asserted, nothing changes
+      dut.io.hzd.stall.poke(false.B)
+      dut.io.mem.out.addr.expect(12.U)
+      dut.io.id.valid.expect(false.B)
       dut.clock.step()
-      dut.io.mem.in.ack.poke(true.B)
-      dut.io.mem.out.addr.expect(4.U)
-      for(i <- 2 until 5) {
-        dut.clock.step()
-        dut.io.id.pc.expect((4*i).U)
-      }
 
-      //Before stalling, accessing address 16
-      dut.io.mem.out.addr.expect(16.U)
-      dut.clock.step()
-      //When stalled, stage should keep PC constant
-      //We assume ack=true, so instruction is being used in ID stage.
-      //We shouldn't update PC to ensure instruction isn't lost
-      dut.io.hzd.stall.poke(true.B)
-      dut.io.mem.out.addr.expect(16.U)
       for(_ <- 0 until 4) {
+        //Nothing changes as we're still waiting on ack
+        dut.io.mem.out.addr.expect(12.U)
+        dut.io.id.valid.expect(false.B)
+        dut.io.id.pc.expect(12.U)
+        dut.io.id.valid.expect(false.B)
         dut.clock.step()
-        dut.io.mem.out.addr.expect(16.U)
       }
-      dut.io.hzd.stall.poke(false.B)
-      //When stall is deasserted, we can immediately attempt to access instruction at PC=20
-      dut.io.mem.out.addr.expect(20.U)
-      dut.clock.step()
-      dut.io.mem.out.addr.expect(24.U) //Should correctly increment address
-      dut.clock.step()
-      //Stall at the same time as cache miss on 24
-      //Address should not be updated past 24
+
+      //Re-toggling stall: Nothing changes
       dut.io.hzd.stall.poke(true.B)
-      dut.io.mem.in.ack.poke(false.B)
-      dut.io.mem.out.addr.expect(24.U)
-      for(i <- 0 until 3) {
+      for (_ <- 0 until 4) {
+        //Nothing changes as we're still waiting on ack
+        dut.io.mem.out.addr.expect(12.U)
+        dut.io.id.valid.expect(false.B)
+        dut.io.id.pc.expect(12.U)
+        dut.io.id.valid.expect(false.B)
         dut.clock.step()
-        dut.io.mem.out.addr.expect(24.U)
       }
-      //Even though ack becomes true while stalled, we shouldn't update address
-      dut.clock.step()
+    }
+  }
+
+  it should "handle ack being asserted while stalling" in {
+    test(new Fetch).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
+      stallPreamble(dut)
+      //Once ack is asserted, that instruction will be saved in sampledInstr
+      //Will show up as output one CC later
       dut.io.mem.in.ack.poke(true.B)
-      dut.io.mem.out.addr.expect(24.U)
-      for(_ <- 0 until 3) {
-        dut.clock.step()
-        dut.io.mem.out.addr.expect(24.U)
-      }
+      dut.io.mem.in.rdata.poke(10.U)
+      dut.io.id.pc.expect(12.U)
+      dut.io.id.valid.expect(false.B)
+      dut.clock.step() //this sets hasSampledInstr high
+
+      //Address should now be incremented because of ack since we have a sampled instruction
+      dut.io.mem.in.ack.poke(false.B)
+      dut.io.mem.in.rdata.poke(20.U)
+      dut.io.mem.out.addr.expect(16.U)
+      dut.io.id.valid.expect(false.B) //Because we're still stalled
+      dut.io.id.instr.expect(10.U) //from sampledInstr
+      dut.io.id.pc.expect(12.U)
       dut.clock.step()
-      //Taking stall low should increment address
+
+      dut.io.mem.out.addr.expect(16.U) //Should still be true
+      dut.io.id.valid.expect(false.B)
+      dut.io.id.instr.expect(10.U)
+      dut.io.id.pc.expect(12.U)
+      dut.clock.step()
+
+      //Next instruction is acknowledged. This should keep addr constant, as we already have a sampled instruction
+      dut.io.mem.in.ack.poke(true.B)
+      dut.io.mem.in.rdata.poke(30.U)
+      dut.io.mem.out.addr.expect(16.U)
+      dut.io.id.valid.expect(false.B)
+      dut.io.id.pc.expect(12.U)
+      dut.io.id.instr.expect(10.U) //from sampledInstr
+      dut.clock.step()
+
+      //Once acknowledged, should still keep memory address constant and presented instruction constant
+      dut.io.mem.out.addr.expect(16.U)
+      dut.io.id.valid.expect(false.B)
+      dut.io.id.pc.expect(12.U)
+      dut.io.id.instr.expect(10.U)
+      dut.clock.step()
+
+      //Deasserting stall should make id.valid=1. Should now attempt to access next instruction
       dut.io.hzd.stall.poke(false.B)
-      dut.io.mem.out.addr.expect(28.U)
+      dut.io.mem.out.addr.expect(16.U)
+      dut.io.id.valid.expect(true.B)
+      dut.io.id.pc.expect(12.U)
+      dut.io.id.instr.expect(10.U) //from sampledInstr
+      dut.clock.step()
+
+      //On next CC, address should increment to 20, and that PC value should also be sent to ID stage
+      //Instruction rdata should equal 30, as that was most recently poked onto bus
+      dut.io.mem.out.addr.expect(20.U)
+      dut.io.id.valid.expect(true.B) //note: Indicates that current read (20, from I$) is valid
+      dut.io.id.pc.expect(16.U)
+      dut.io.id.instr.expect(30.U) //data read from bus
+      dut.clock.step()
+
+      //Should now be back to normal
+      dut.io.mem.out.addr.expect(24.U)
+      dut.io.mem.in.rdata.poke(40.U)
+      dut.io.id.valid.expect(true.B)
+      dut.io.id.pc.expect(20.U)
+      dut.io.id.instr.expect(40.U)
+    }
+  }
+
+  it should "handle ack being asserted on same cc as stall is deasserted while no instruction has been sampled" in {
+    test(new Fetch) { dut =>
+      stallPreamble(dut)
+      //Leaves the DUT in a state where ack=false, stall=true, in.rdata=9, out.addr=id.pc=12 and no sampled instr
+
+      //Deassert stall and raise ack. Read data should be immediately present
+      dut.io.hzd.stall.poke(false.B)
+      dut.io.mem.in.ack.poke(true.B)
+
+      for(i <- 3 until 8) {
+        dut.io.mem.in.rdata.poke((10*i).U)
+        dut.io.id.instr.expect((10*i).U)
+        dut.io.id.pc.expect((4*i).U)
+        dut.io.mem.out.addr.expect((4*(i+1)).U)
+        dut.clock.step()
+      }
+    }
+  }
 
 
+  it should "handle ack being asserted on same cc as stall is deasserted while an instruction has been sampled" in {
+    test(new Fetch) { dut =>
+      stallPreamble(dut)
+      //Leaves the DUT in a state where ack=false, stall=true, in.rdata=9, out.addr=id.pc=12 and no sampled instr
 
+      //Ack to receive and sample first instruction (reading mem[12]==10)
+      dut.io.mem.in.ack.poke(true.B)
+      dut.io.mem.in.rdata.poke(10.U)
+      dut.io.mem.out.addr.expect(16.U)
+      dut.io.id.pc.expect(12.U)
+      dut.io.id.instr.expect(10.U)
+      dut.io.id.valid.expect(false.B) //because stalled
+      dut.clock.step()
 
+      //Lower stall and ack next instruction at the same time
+      //Since we have a stored instruction, keep requesting same address as the pipeline
+      //isn't yet ready
+      dut.io.hzd.stall.poke(false.B)
+      dut.io.mem.in.ack.poke(true.B)
+      dut.io.mem.in.rdata.poke(20.U) //Reading mem[16]==20
+
+      dut.io.id.instr.expect(10.U)
+      dut.io.mem.out.addr.expect(16.U) //Still fetching from mem[16] due to sampled instruction
+      dut.io.id.pc.expect(12.U)
+      dut.io.id.valid.expect(true.B)
+      dut.clock.step()
+
+      //sampled instruction has been expedited, data from I$ is now visible
+      //and next instruction is being sampled.
+      //Because stall goes high, instruction from mem[16] gets saved
+      dut.io.mem.out.addr.expect(20.U) //start fetching from addr 20
+      dut.io.id.instr.expect(20.U) //Show instruction with value 20 fetched from mem[16]
+      dut.io.id.pc.expect(16.U)
+      dut.io.hzd.stall.poke(true.B)
+      dut.io.id.valid.expect(false.B)
+      dut.clock.step()
+
+      //Due to being stalled, instruction from mem[16] is now saved in sampledInstr.
+      //Instruction from mem[20] is ready on I$ output
+      dut.io.mem.in.rdata.poke(30.U)
+      for(_ <- 0 until 4) {
+        dut.io.mem.out.addr.expect(20.U)
+        dut.io.id.instr.expect(20.U) //Still 20 from mem[16] in sampledInstr
+        dut.io.id.pc.expect(16.U)
+        dut.io.id.valid.expect(false.B)
+        dut.clock.step()
+      }
     }
   }
 }

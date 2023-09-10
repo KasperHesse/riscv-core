@@ -5,7 +5,7 @@ import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.must.Matchers
 
-class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
+class StypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
   behavior of "Memory instructions"
   
   implicit val conf: Config = defaultConf
@@ -18,7 +18,7 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
         |lw x2, 20(x0)
         |""".stripMargin
     val instrs = assembleMap(asm)
-    test(new Core()) {dut =>
+    test(new Core()).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
       val sh = SimulationHarness(dut, instrs)
       sh.run()
 
@@ -240,6 +240,14 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
     }
   }
 
+  /*
+  0: li
+  4: sw
+  8: lw
+  12: addi, load-use hazard
+  16: addi, extra
+   */
+
   it should "avoid load-use hazards" in {
     val asm =
       """
@@ -247,6 +255,7 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
         |sw x1, 0(x0)
         |lw x2, 0(x0)
         |addi x2, x2, 5
+        |addi x3, x0, 10
         |""".stripMargin
     val instrs = assembleMap(asm)
     test(new Core).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
@@ -254,8 +263,8 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
       sh.run()
 
       expectReg(dut, 1, 42)
-//      expectReg(dut, 2, 47)
       expectReg(dut, 2, 47)
+      expectReg(dut, 3, 10)
     }
   }
 }
