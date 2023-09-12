@@ -83,17 +83,17 @@ package object core {
     require(minDelay > 0, s"Dcache cannot acknowledge on same cycle as request. minDelay must be >0, is $minDelay")
     require(maxDelay >= minDelay, s"Dcache maxDelay must be >= minDelay ($minDelay), is $maxDelay")
     override def drive(): Unit = {
-      val we = port.out.we.peekBoolean()
-      val wmask = port.out.wmask.peek().asBools.map(_.litToBoolean)
-      val addr = port.out.addr.peekInt().toInt
-      val wdata = port.out.wdata.peekInt().toInt
+      val we = port.req.we.peekBoolean()
+      val wmask = port.req.wmask.peek().asBools.map(_.litToBoolean)
+      val addr = port.req.addr.peekInt().toInt
+      val wdata = port.req.wdata.peekInt().toInt
 
       val d = Random.between(minDelay, maxDelay+1)
       for(_ <- 1 to d) {
         clock.step()
-        port.in.ack.poke(false.B)
+        port.resp.ack.poke(false.B)
       }
-      port.in.ack.poke(true.B)
+      port.resp.ack.poke(true.B)
       if (we) {
         for (i <- 0 until conf.WMASKLEN) {
           if (wmask(i)) {
@@ -105,7 +105,7 @@ package object core {
         for (i <- 0 until conf.WMASKLEN) {
           r |= (data.getOrElse(addr + i, 0.toByte) & 0xff) << 8 * i
         }
-        port.in.rdata.poke(r & 0xffffffffL)
+        port.resp.rdata.poke(r & 0xffffffffL)
       }
     }
   }
@@ -139,13 +139,13 @@ package object core {
   class SoftwareSerialPort(port: MemoryInterface, clock: Clock, low: Int, high: Int)
                            (implicit conf: Config) extends PortDriver(port, low, high) {
     override def drive(): Unit = {
-      val we = port.out.we.peekBoolean()
-      val wdata = port.out.wdata.peekInt().toInt
-      val wmask = port.out.wmask.peek().asBools.map(_.litToBoolean)
+      val we = port.req.we.peekBoolean()
+      val wdata = port.req.wdata.peekInt().toInt
+      val wmask = port.req.wmask.peek().asBools.map(_.litToBoolean)
       val chars = Seq.tabulate(4)(i => ((wdata >> i*8) & 0xFF).toChar)
 
       clock.step()
-      port.in.ack.poke(true.B)
+      port.resp.ack.poke(true.B)
 
       if(we) {
         //Write the bytes that are high to serial-out
@@ -179,15 +179,15 @@ package object core {
 
     val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM).litValue.toInt
     override def drive(): Unit = {
-      val addr = port.out.addr.peekInt().toInt
+      val addr = port.req.addr.peekInt().toInt
       val d = Random.between(minDelay, maxDelay+1)
 //      println(s"Access to $addr, ack after $d")
       for (_ <- 1 to d) {
         clock.step()
-        port.in.ack.poke(false.B)
+        port.resp.ack.poke(false.B)
       }
-      port.in.ack.poke(true.B)
-      port.in.rdata.poke(instrs.getOrElse(addr, nop).toLong & 0xffff_ffffL)
+      port.resp.ack.poke(true.B)
+      port.resp.rdata.poke(instrs.getOrElse(addr, nop).toLong & 0xffff_ffffL)
     }
 
     def genRand(minl: Int, maxl: Int): Int = {
@@ -249,15 +249,15 @@ package object core {
    */
   class MemAgent(port: MemoryInterface)(implicit conf: Config) extends SimulationAgent(port) {
     override def run(dut: Core): Unit = {
-      port.in.ack.poke(false.B)
-      port.in.rdata.poke(0.U)
+      port.resp.ack.poke(false.B)
+      port.resp.rdata.poke(0.U)
       while(!this.finish) {
-        if (!port.out.req.peekBoolean()) {
+        if (!port.req.req.peekBoolean()) {
           dut.clock.step()
-          port.in.ack.poke(false.B)
-          port.in.rdata.poke(0.U)
+          port.resp.ack.poke(false.B)
+          port.resp.rdata.poke(0.U)
         } else {
-          val addr = port.out.addr.peekInt().toInt
+          val addr = port.req.addr.peekInt().toInt
           for (pd <- pds) {
             if (pd.low <= addr && addr <= pd.high) {
               pd.drive()
@@ -350,14 +350,14 @@ package object core {
    */
   def driveInstructionMemory(instrs: Map[Int, Instruction], clock: Clock, imem: MemoryInterface): Unit = {
     val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM)
-    while(!imem.out.req.peekBoolean()) {
+    while(!imem.req.req.peekBoolean()) {
       clock.step()
-      imem.in.ack.poke(false.B)
+      imem.resp.ack.poke(false.B)
     }
-    val addr = imem.out.addr.peekInt()
+    val addr = imem.req.addr.peekInt()
     clock.step()
-    imem.in.rdata.poke(instrs.getOrElse(addr.toInt, nop).toUInt)
-    imem.in.ack.poke(true.B)
+    imem.resp.rdata.poke(instrs.getOrElse(addr.toInt, nop).toUInt)
+    imem.resp.ack.poke(true.B)
   }
 
   /**

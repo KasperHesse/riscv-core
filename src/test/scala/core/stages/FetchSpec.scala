@@ -13,8 +13,8 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
 
   it should "update addr when ack is signalled" in {
     test(new Fetch).withAnnotations(Seq(WriteVcdAnnotation)) { dut =>
-      val in = dut.io.mem.in
-      val out = dut.io.mem.out
+      val in = dut.io.mem.resp
+      val out = dut.io.mem.req
       in.ack.poke(false.B)
       in.rdata.poke(0.U)
 
@@ -36,8 +36,8 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
 
   it should "keep addr constant when ack is not signalled" in {
     test(new Fetch) {dut =>
-      val in = dut.io.mem.in
-      val out = dut.io.mem.out
+      val in = dut.io.mem.resp
+      val out = dut.io.mem.req
       in.ack.poke(false.B)
       in.rdata.poke(0.U)
 
@@ -89,8 +89,8 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
     - When ack, addr is driven by pcNext
      */
     test(new Fetch).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
-      val in = dut.io.mem.in
-      val out = dut.io.mem.out
+      val in = dut.io.mem.resp
+      val out = dut.io.mem.req
       in.ack.poke(false.B)
       in.rdata.poke(0.U)
 
@@ -145,16 +145,16 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
   */
   def stallPreamble(dut: Fetch): Unit = {
     //Setup
-    dut.io.mem.in.ack.poke(false.B)
-    dut.io.mem.in.rdata.poke(0.U)
-    dut.io.mem.out.addr.expect(conf.pcReset.U)
+    dut.io.mem.resp.ack.poke(false.B)
+    dut.io.mem.resp.rdata.poke(0.U)
+    dut.io.mem.req.addr.expect(conf.pcReset.U)
     dut.clock.step()
 
     //Once ack is signalled, addr should increment
-    dut.io.mem.in.ack.poke(true.B)
+    dut.io.mem.resp.ack.poke(true.B)
     for(i <- 0 until 12 by 4) {
-      dut.io.mem.in.rdata.poke((i+1).U)
-      dut.io.mem.out.addr.expect((4+i).U)
+      dut.io.mem.resp.rdata.poke((i+1).U)
+      dut.io.mem.req.addr.expect((4+i).U)
       dut.io.id.valid.expect(true.B)
       dut.io.id.instr.expect((i+1).U)
       dut.io.id.pc.expect(i.U)
@@ -167,9 +167,9 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
 
     //Once ack is deasserted, instruction should be invalid and address should not change
     //Since ack was not received, we're stll trying to access address 12
-    dut.io.mem.in.ack.poke(false.B)
+    dut.io.mem.resp.ack.poke(false.B)
     for (_ <- 0 until 4) {
-      dut.io.mem.out.addr.expect(12.U)
+      dut.io.mem.req.addr.expect(12.U)
       dut.io.id.valid.expect(false.B)
       dut.io.id.pc.expect(12.U)
       dut.io.id.instr.expect(9.U)
@@ -179,7 +179,7 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
     //If stalled, address should not change
     dut.io.hzd.stall.poke(true.B)
     for (_ <- 0 until 3) {
-      dut.io.mem.out.addr.expect(12.U)
+      dut.io.mem.req.addr.expect(12.U)
       dut.io.id.valid.expect(false.B)
       dut.io.id.pc.expect(12.U)
       dut.io.id.instr.expect(9.U)
@@ -193,13 +193,13 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
       stallPreamble(dut)
       //Once stall is deasserted, since ack hasn't been asserted, nothing changes
       dut.io.hzd.stall.poke(false.B)
-      dut.io.mem.out.addr.expect(12.U)
+      dut.io.mem.req.addr.expect(12.U)
       dut.io.id.valid.expect(false.B)
       dut.clock.step()
 
       for(_ <- 0 until 4) {
         //Nothing changes as we're still waiting on ack
-        dut.io.mem.out.addr.expect(12.U)
+        dut.io.mem.req.addr.expect(12.U)
         dut.io.id.valid.expect(false.B)
         dut.io.id.pc.expect(12.U)
         dut.io.id.valid.expect(false.B)
@@ -210,7 +210,7 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
       dut.io.hzd.stall.poke(true.B)
       for (_ <- 0 until 4) {
         //Nothing changes as we're still waiting on ack
-        dut.io.mem.out.addr.expect(12.U)
+        dut.io.mem.req.addr.expect(12.U)
         dut.io.id.valid.expect(false.B)
         dut.io.id.pc.expect(12.U)
         dut.io.id.valid.expect(false.B)
@@ -224,38 +224,38 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
       stallPreamble(dut)
       //Once ack is asserted, that instruction will be saved in sampledInstr
       //Will show up as output one CC later
-      dut.io.mem.in.ack.poke(true.B)
-      dut.io.mem.in.rdata.poke(10.U)
+      dut.io.mem.resp.ack.poke(true.B)
+      dut.io.mem.resp.rdata.poke(10.U)
       dut.io.id.pc.expect(12.U)
       dut.io.id.valid.expect(false.B)
       dut.clock.step() //this sets hasSampledInstr high
 
       //Address should now be incremented because of ack since we have a sampled instruction
-      dut.io.mem.in.ack.poke(false.B)
-      dut.io.mem.in.rdata.poke(20.U)
-      dut.io.mem.out.addr.expect(16.U)
+      dut.io.mem.resp.ack.poke(false.B)
+      dut.io.mem.resp.rdata.poke(20.U)
+      dut.io.mem.req.addr.expect(16.U)
       dut.io.id.valid.expect(false.B) //Because we're still stalled
       dut.io.id.instr.expect(10.U) //from sampledInstr
       dut.io.id.pc.expect(12.U)
       dut.clock.step()
 
-      dut.io.mem.out.addr.expect(16.U) //Should still be true
+      dut.io.mem.req.addr.expect(16.U) //Should still be true
       dut.io.id.valid.expect(false.B)
       dut.io.id.instr.expect(10.U)
       dut.io.id.pc.expect(12.U)
       dut.clock.step()
 
       //Next instruction is acknowledged. This should keep addr constant, as we already have a sampled instruction
-      dut.io.mem.in.ack.poke(true.B)
-      dut.io.mem.in.rdata.poke(30.U)
-      dut.io.mem.out.addr.expect(16.U)
+      dut.io.mem.resp.ack.poke(true.B)
+      dut.io.mem.resp.rdata.poke(30.U)
+      dut.io.mem.req.addr.expect(16.U)
       dut.io.id.valid.expect(false.B)
       dut.io.id.pc.expect(12.U)
       dut.io.id.instr.expect(10.U) //from sampledInstr
       dut.clock.step()
 
       //Once acknowledged, should still keep memory address constant and presented instruction constant
-      dut.io.mem.out.addr.expect(16.U)
+      dut.io.mem.req.addr.expect(16.U)
       dut.io.id.valid.expect(false.B)
       dut.io.id.pc.expect(12.U)
       dut.io.id.instr.expect(10.U)
@@ -263,7 +263,7 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
 
       //Deasserting stall should make id.valid=1. Should now attempt to access next instruction
       dut.io.hzd.stall.poke(false.B)
-      dut.io.mem.out.addr.expect(16.U)
+      dut.io.mem.req.addr.expect(16.U)
       dut.io.id.valid.expect(true.B)
       dut.io.id.pc.expect(12.U)
       dut.io.id.instr.expect(10.U) //from sampledInstr
@@ -271,15 +271,15 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
 
       //On next CC, address should increment to 20, and that PC value should also be sent to ID stage
       //Instruction rdata should equal 30, as that was most recently poked onto bus
-      dut.io.mem.out.addr.expect(20.U)
+      dut.io.mem.req.addr.expect(20.U)
       dut.io.id.valid.expect(true.B) //note: Indicates that current read (20, from I$) is valid
       dut.io.id.pc.expect(16.U)
       dut.io.id.instr.expect(30.U) //data read from bus
       dut.clock.step()
 
       //Should now be back to normal
-      dut.io.mem.out.addr.expect(24.U)
-      dut.io.mem.in.rdata.poke(40.U)
+      dut.io.mem.req.addr.expect(24.U)
+      dut.io.mem.resp.rdata.poke(40.U)
       dut.io.id.valid.expect(true.B)
       dut.io.id.pc.expect(20.U)
       dut.io.id.instr.expect(40.U)
@@ -293,13 +293,13 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
 
       //Deassert stall and raise ack. Read data should be immediately present
       dut.io.hzd.stall.poke(false.B)
-      dut.io.mem.in.ack.poke(true.B)
+      dut.io.mem.resp.ack.poke(true.B)
 
       for(i <- 3 until 8) {
-        dut.io.mem.in.rdata.poke((10*i).U)
+        dut.io.mem.resp.rdata.poke((10*i).U)
         dut.io.id.instr.expect((10*i).U)
         dut.io.id.pc.expect((4*i).U)
-        dut.io.mem.out.addr.expect((4*(i+1)).U)
+        dut.io.mem.req.addr.expect((4*(i+1)).U)
         dut.clock.step()
       }
     }
@@ -312,9 +312,9 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
       //Leaves the DUT in a state where ack=false, stall=true, in.rdata=9, out.addr=id.pc=12 and no sampled instr
 
       //Ack to receive and sample first instruction (reading mem[12]==10)
-      dut.io.mem.in.ack.poke(true.B)
-      dut.io.mem.in.rdata.poke(10.U)
-      dut.io.mem.out.addr.expect(16.U)
+      dut.io.mem.resp.ack.poke(true.B)
+      dut.io.mem.resp.rdata.poke(10.U)
+      dut.io.mem.req.addr.expect(16.U)
       dut.io.id.pc.expect(12.U)
       dut.io.id.instr.expect(10.U)
       dut.io.id.valid.expect(false.B) //because stalled
@@ -324,11 +324,11 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
       //Since we have a stored instruction, keep requesting same address as the pipeline
       //isn't yet ready
       dut.io.hzd.stall.poke(false.B)
-      dut.io.mem.in.ack.poke(true.B)
-      dut.io.mem.in.rdata.poke(20.U) //Reading mem[16]==20
+      dut.io.mem.resp.ack.poke(true.B)
+      dut.io.mem.resp.rdata.poke(20.U) //Reading mem[16]==20
 
       dut.io.id.instr.expect(10.U)
-      dut.io.mem.out.addr.expect(16.U) //Still fetching from mem[16] due to sampled instruction
+      dut.io.mem.req.addr.expect(16.U) //Still fetching from mem[16] due to sampled instruction
       dut.io.id.pc.expect(12.U)
       dut.io.id.valid.expect(true.B)
       dut.clock.step()
@@ -336,7 +336,7 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
       //sampled instruction has been expedited, data from I$ is now visible
       //and next instruction is being sampled.
       //Because stall goes high, instruction from mem[16] gets saved
-      dut.io.mem.out.addr.expect(20.U) //start fetching from addr 20
+      dut.io.mem.req.addr.expect(20.U) //start fetching from addr 20
       dut.io.id.instr.expect(20.U) //Show instruction with value 20 fetched from mem[16]
       dut.io.id.pc.expect(16.U)
       dut.io.hzd.stall.poke(true.B)
@@ -345,9 +345,9 @@ class FetchSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
 
       //Due to being stalled, instruction from mem[16] is now saved in sampledInstr.
       //Instruction from mem[20] is ready on I$ output
-      dut.io.mem.in.rdata.poke(30.U)
+      dut.io.mem.resp.rdata.poke(30.U)
       for(_ <- 0 until 4) {
-        dut.io.mem.out.addr.expect(20.U)
+        dut.io.mem.req.addr.expect(20.U)
         dut.io.id.instr.expect(20.U) //Still 20 from mem[16] in sampledInstr
         dut.io.id.pc.expect(16.U)
         dut.io.id.valid.expect(false.B)

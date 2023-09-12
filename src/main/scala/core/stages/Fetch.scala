@@ -29,10 +29,10 @@ class Fetch(implicit conf: Config) extends PipelineStage {
   //If loadPC arrives while waiting on ack, these regs hold flag and new PC to update to
   val delayedLoadPC = RegInit(false.B)
   val delayedNewPC = RegInit(0.U(conf.XLEN.W))
-  when(io.ctrl.loadPC && !io.mem.in.ack) { //Set
+  when(io.ctrl.loadPC && !io.mem.resp.ack) { //Set
     delayedLoadPC := true.B
     delayedNewPC := io.ctrl.newPC
-  } .elsewhen(delayedLoadPC && io.mem.in.ack) { //Reset
+  } .elsewhen(delayedLoadPC && io.mem.resp.ack) { //Reset
     delayedLoadPC := false.B
   }
 
@@ -40,39 +40,39 @@ class Fetch(implicit conf: Config) extends PipelineStage {
   //Storing the most recent instruction in case of stall
   val sampledInstr = Reg(UInt(conf.XLEN.W))
   val hasSampledInstr = RegInit(false.B)
-  when(risingEdge(io.hzd.stall && io.mem.in.ack) && !hasSampledInstr) { //Set
+  when(risingEdge(io.hzd.stall && io.mem.resp.ack) && !hasSampledInstr) { //Set
     hasSampledInstr := true.B
-    sampledInstr := io.mem.in.rdata
+    sampledInstr := io.mem.resp.rdata
   } .elsewhen(hasSampledInstr && io.id.valid) { //Reset
     hasSampledInstr := false.B
   }
 
   //Next PC logic
   PCnext := MuxCase(PC + 4.U, Seq(
-    (io.ctrl.loadPC && io.mem.in.ack, io.ctrl.newPC),
-    (delayedLoadPC && io.mem.in.ack, delayedNewPC)
+    (io.ctrl.loadPC && io.mem.resp.ack, io.ctrl.newPC),
+    (delayedLoadPC && io.mem.resp.ack, delayedNewPC)
   ))
 
   //OUTPUT LOGIC
   //When acknowledged, issue a request for next instruction
   //When sampled instruction is stored while stalled, this also represents that we wish to pre-load next instruction
-  val addr = Mux(io.mem.in.ack || hasSampledInstr, PCnext, PC)
-  io.id.instr := Mux(hasSampledInstr, sampledInstr, io.mem.in.rdata)
+  val addr = Mux(io.mem.resp.ack || hasSampledInstr, PCnext, PC)
+  io.id.instr := Mux(hasSampledInstr, sampledInstr, io.mem.resp.rdata)
 
   //updatePC has some logic in common with io.id.valid, but controls when to register new value of PC.
   //Sometimes, we wish to update value of PC without signalling valid (e.g. when flushing due to loadPC)
-  updatePC := !(io.hzd.stall) && (io.mem.in.ack || hasSampledInstr)
-  io.id.valid := !(io.hzd.flush || io.hzd.stall || delayedLoadPC) && (io.mem.in.ack || hasSampledInstr)
+  updatePC := !(io.hzd.stall) && (io.mem.resp.ack || hasSampledInstr)
+  io.id.valid := !(io.hzd.flush || io.hzd.stall || delayedLoadPC) && (io.mem.resp.ack || hasSampledInstr)
 
   //Does not follow addr exactly, since addr is allowed to increment if ack arrives while stalled.
   //In that case, PC value to ID stage should still be kept constant
   //Since IF->ID takes at least two clock cycles (one to req, one to ack), value of PC sent to ID stage is delayed by one CC.
   io.id.pc := RegNext(Mux(io.hzd.stall, PC, addr))
-  io.mem.out.addr := addr
-  io.mem.out.req := req
+  io.mem.req.addr := addr
+  io.mem.req.req := req
 
   //Fetch stage never writes to memory
-  io.mem.out.wdata := 0.U
-  io.mem.out.we := false.B
-  io.mem.out.wmask := 0.U
+  io.mem.req.wdata := 0.U
+  io.mem.req.we := false.B
+  io.mem.req.wmask := 0.U
 }
