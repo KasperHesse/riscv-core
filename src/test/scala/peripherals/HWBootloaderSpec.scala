@@ -48,24 +48,24 @@ class HWBootloaderSpec extends AnyFlatSpec with ChiselScalatestTester with Match
    */
   def readFromMem(mem: mutable.Map[Int, Byte], dut: HWBootloader, go: Array[Boolean]): Unit = {
     while(!go(0)) {
-      while(!dut.io.memOut.req.peekBoolean() && !go(0)) {
+      while(!dut.io.mem.req.req.peekBoolean() && !go(0)) {
         dut.clock.step()
       }
       if (go(0)) {
         return
       }
-      val offset = dut.io.memOut.wmask.peekInt().toInt match {
+      val offset = dut.io.mem.req.wmask.peekInt().toInt match {
         case 1 => 0
         case 2 => 1
         case 4 => 2
         case 8 => 3
-        case _ => fail(s"offset was not decodeable from one-hot, was ${dut.io.memOut.wmask.peek()}")
+        case _ => fail(s"offset was not decodeable from one-hot, was ${dut.io.mem.req.wmask.peek()}")
       }
-      val addr = (dut.io.memOut.addr.peekInt() + offset).toInt
-      mem.update(addr, dut.io.memOut.wdata.peekInt().toByte)
+      val addr = (dut.io.mem.req.addr.peekInt() + offset).toInt
+      mem.update(addr, dut.io.mem.req.wdata.peekInt().toByte)
       dut.clock.step()
       timescope {
-        dut.io.memIn.ack.poke(true.B)
+        dut.io.mem.resp.ack.poke(true.B)
         dut.clock.step()
       }
     }

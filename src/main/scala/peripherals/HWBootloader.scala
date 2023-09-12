@@ -10,8 +10,7 @@ class HWBootloader(val frequency: Int,
                    rxBufSize: Int,
                    txBufSize: Int)(implicit conf: Config) extends Module {
   val io = IO(new Bundle {
-    val memIn = Input(new MemoryResponse)
-    val memOut = Output(new MemoryRequest)
+    val mem = new MemoryInterface
     /** UART rx data */
     val rxd = Input(Bool())
     /** GO-signal to core to start execution */
@@ -56,8 +55,7 @@ class HWBootloader(val frequency: Int,
       }
     }
     is(LOOP2) { //Store byte in memory
-      //req high -> set below
-      when(io.memIn.ack) {
+      when(io.mem.resp.ack) {
         state := LOOP3
       }
     }
@@ -69,11 +67,11 @@ class HWBootloader(val frequency: Int,
     }
   }
 
-  io.memOut.wmask := wmask
-  io.memOut.addr := 0.U(16.W) ## addr ## 0.U(2.W)
-  io.memOut.wdata := Fill(4, byte)
-  io.memOut.we := true.B
-  io.memOut.req := state === LOOP2 && !io.memIn.ack
+  io.mem.req.wmask := wmask
+  io.mem.req.addr := 0.U(16.W) ## addr ## 0.U(2.W)
+  io.mem.req.wdata := Fill(4, byte)
+  io.mem.req.we := true.B
+  io.mem.req.req := state === LOOP2 && !io.mem.resp.ack
   io.go := state === GO
 
 

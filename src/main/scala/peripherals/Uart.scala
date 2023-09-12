@@ -12,7 +12,7 @@ package peripherals
 
 import chisel3._
 import chisel3.util._
-import core.{Config, MemoryRequest, MemoryResponse}
+import core.{Config, MemoryInterface, MemoryRequest, MemoryResponse}
 
 /**
  * This is a minimal data channel with a ready/valid handshake.
@@ -174,8 +174,7 @@ class UartWrapper(frequency: Int,
                   rxBufSize: Int,
                   txBufSize: Int)(implicit conf: Config) extends Module {
   val io = IO(new Bundle {
-    val memIn = Input(new MemoryRequest)
-    val memOut = Output(new MemoryResponse)
+    val mem = Flipped(new MemoryInterface)
     val txd = Output(Bool())
     val rxd = Input(Bool())
   })
@@ -187,17 +186,17 @@ class UartWrapper(frequency: Int,
 
   //Register read logic
   val rdData = RegInit(0.U(8.W))
-  val ack = RegNext(io.memIn.req)
+  val ack = RegNext(io.mem.req.req)
 
   //Default assignments
   uart.io.rdData.ready := false.B
   uart.io.txData.valid := false.B
-  uart.io.txData.bits := io.memIn.wdata(7,0)
+  uart.io.txData.bits := io.mem.req.wdata(7,0)
 
   //Handle reads
-  when(io.memIn.req && !io.memIn.we) { //By definition, 2LSB will be 0
+  when(io.mem.req.req && !io.mem.req.we) { //By definition, 2LSB will be 0
     //Multiplex read register
-    switch(io.memIn.addr(4,2)) {
+    switch(io.mem.req.addr(4,2)) {
       is(0.U(3.W)) { //rdData
         uart.io.rdData.ready := true.B
         rdData := 0.U((conf.XLEN-8).W) ## uart.io.rdData.bits
@@ -221,12 +220,12 @@ class UartWrapper(frequency: Int,
   }
 
   //Handle writes
-  uart.io.txData.bits := io.memIn.wdata(7,0)
-  uart.io.txData.valid := io.memIn.req && io.memIn.we && io.memIn.wmask(0)
+  uart.io.txData.bits := io.mem.req.wdata(7,0)
+  uart.io.txData.valid := io.mem.req.req && io.mem.req.we && io.mem.req.wmask(0)
 
   //Handle I/O
-  io.memOut.ack := ack
-  io.memOut.rdata := rdData
+  io.mem.resp.ack := ack
+  io.mem.resp.rdata := rdData
 }
 
 object UartMain extends App {
