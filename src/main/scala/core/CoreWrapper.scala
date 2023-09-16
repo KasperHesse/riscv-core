@@ -22,7 +22,7 @@ class CoreWrapper(wrapConf: Map[String,Int])(implicit conf: Config) extends Modu
   val core = Module(new Core)
   val memblock = Module(new MemBlock(wrapConf("memSize")))
   val uart = Module(new UartWrapper(
-    wrapConf("uartFreq"),
+    wrapConf("coreFreq"),
     wrapConf("uartBaud"),
     wrapConf("uartRxBufSize"),
     wrapConf("uartTxBufSize"))
@@ -32,9 +32,14 @@ class CoreWrapper(wrapConf: Map[String,Int])(implicit conf: Config) extends Modu
   val memArb = Module(new MemArbiter(4, Seq(0x00, wrapConf("uartBaseAddr"), wrapConf("keysBaseAddr"), wrapConf("ledsBaseAddr"))))
   val memMux = Module(new MemMux)
   //Bad implementation right now, but we do what works. Duplicate UART for bootloader and core
-  val bootloader = Module(new HWBootloader(wrapConf("uartFreq"), wrapConf("uartBaud"), 2, 2))
+  val bootloader = Module(new HWBootloader(wrapConf("coreFreq"), wrapConf("uartBaud"), 2, 2))
 
   //When !go, hwbootloader should write directly into memblock. When go, memblock should be connected to memMux instead
+  /* TODO Failing timing from writeback_rd_reg
+      To ex-stage, through forwarding unit to value "v1", through ALU and ARITH logic, to waddr, to memblock
+
+      Long net delays = we either need more pipelining or a way of reducing num. logic levels
+   */
   when(!bootloader.io.go) {
     memblock.io <> bootloader.io.mem
     memMux.io.mem.resp.ack := false.B

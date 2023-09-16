@@ -169,6 +169,21 @@ class Uart(frequency: Int,
   rx.io.rxd := io.rxd
 }
 
+/**
+ * A wrapper around the [[Uart]] module, providing a number of memory-mapped word-length registers
+ * - 0b00000: Read byte from UART
+ * - 0b00100: Read buffer full flag
+ * - 0b01000: Read buffer count
+ * - 0b01100: Read buffer available flag
+ * - 0b10000: Write byte to UART
+ * - 0b10100: Write buffer full flag
+ * - 0b11000: Write buffer count
+ * @param frequency
+ * @param baudRate
+ * @param rxBufSize
+ * @param txBufSize
+ * @param conf
+ */
 class UartWrapper(frequency: Int,
                   baudRate: Int,
                   rxBufSize: Int,
@@ -197,23 +212,24 @@ class UartWrapper(frequency: Int,
   when(io.mem.req.req && !io.mem.req.we) { //By definition, 2LSB will be 0
     //Multiplex read register
     switch(io.mem.req.addr(4,2)) {
-      is(0.U(3.W)) { //rdData
+      is(0.U(3.W)) { //read byte
         uart.io.rdData.ready := true.B
         rdData := 0.U((conf.XLEN-8).W) ## uart.io.rdData.bits
       }
-      is(1.U(3.W)) { //rdFlag
-        rdData := Cat(0.U(6.W), uart.io.rxFull)
+      is(1.U(3.W)) { //buffer full flag
+        rdData := uart.io.rxFull
       }
-      is(2.U(3.W)) { //rdCnt
+      is(2.U(3.W)) { //read buffer count
         rdData := uart.io.rxCnt
       }
-      is(4.U(3.W)) { //wrData
-        rdData := uart.io.txData.bits
+      is(3.U(3.W)) { //read buffer avail
+        rdData := uart.io.rxAvail
       }
-      is(5.U(3.W)) {
+      //4.U is undefined as it is write-only
+      is(5.U(3.W)) { //write buffer full
         rdData := uart.io.txFull
       }
-      is(6.U(3.W)) {
+      is(6.U(3.W)) { //Write buffer count
         rdData := uart.io.txCnt
       }
     }

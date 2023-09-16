@@ -25,13 +25,22 @@ package object core {
     bw.close()
 
     //Compile and extract .text-segment
-    if(System.getProperty("os.name").contains("Windows")) {
-      s"riscv64-unknown-elf-gcc.exe -march=rv32i -mabi=ilp32 -c $file.s -o $file.o".! //compile
-      s"riscv64-unknown-elf-objcopy.exe -O binary $file.o $file.bin".! //extract
-    } else { //Assuming Linux
-      s"riscv64-linux-gnu-gcc -march=rv32i -mabi=ilp32 -c $file.s -o $file.o".!
-      s"riscv64-linux-gnu-objcopy -O binary $file.o $file.bin".!
+    val gccOpts = s"-nostdlib -nostartfiles -march=rv32i -mabi=ilp32 -T programs/linker.ld  $file.s -o $file.o"
+    val objcopyOpts = s"-R \".note.gnu.build-id\" -O binary $file.o $file.bin"
+    val (gcc, objcopy) = if (System.getProperty("os.name").contains("Windows")) {
+      ("riscv64-unknown-elf-gcc.exe", "riscv64-unknown-elf-objcopy.exe")
+    } else {
+      ("riscv64-linux-gnu-gcc", "riscv64-linux-gnu-objcopy")
     }
+    s"$gcc $gccOpts".!
+    s"$objcopy $objcopyOpts".!
+//    if(System.getProperty("os.name").contains("Windows")) {
+//      s"riscv64-unknown-elf-gcc.exe $gccOpts".! //compile
+//      s"riscv64-unknown-elf-objcopy.exe $objcopyOpts".! //extract
+//    } else { //Assuming Linux
+//      s"riscv64-linux-gnu-gcc -march=rv32i -mabi=ilp32 -c $file.s -o $file.o".!
+//      s"riscv64-linux-gnu-objcopy -O binary $file.o $file.bin".!
+//    }
 
     //Retrieve .text-segment, parse as int
     val fis = new FileInputStream(s"$file.bin")
@@ -273,6 +282,43 @@ package object core {
       val ma = new MemAgent(port)
       ma.register(pds)
       ma
+    }
+  }
+
+  /**
+   * Write a single value onto a UART receiver
+   * @param rx The UART's rx pin
+   * @param clock The clock of the system
+   * @param freq The clock frequency of the system
+   * @param baud The baudrate of the UART receiver
+   * @param value THe values to write out. All values should be 0<=v<=255
+   */
+  def writeToUart(rx: Bool, clock: Clock, freq: Int, baud: Int, value: Int): Unit = {
+    val cyclesPerBaud = freq/baud
+    val txData = 0x600 | ((value & 0xFF) << 1)
+    for(i <- 0 until 11) {
+      val tx = (txData >> i) & 1
+      rx.poke(tx.B)
+      clock.step(cyclesPerBaud)
+    }
+    rx.poke(true.B)
+  }
+  /**
+   * Write a stream of values onto a UART receiver
+   * @param rx The UART's rx pin
+   * @param clock The clock of the system
+   * @param freq The clock frequency of the system
+   * @param baud The baudrate of the UART receiver
+   * @param values THe values to write out. All values should be 0<=v<=255
+   */
+  def writeToUart(rx: Bool, clock: Clock, freq: Int, baud: Int, values: Seq[Int]): Unit = {
+    for(group <- values.grouped(255)) {
+      writeToUart(rx, clock, freq, baud, group.length)
+      group.foreach(v => writeToUart(rx, clock, freq, baud, v))
+    }
+    //If exactly a multiple of 255, should send 0 afterwards to move into GO state
+    if (values.length % 255 == 0) {
+      writeToUart(rx, clock, freq, baud, 0)
     }
   }
 
