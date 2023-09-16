@@ -342,8 +342,12 @@ hs_err_pid*
 
 
 *.bin
-*.s
+asm.s
 *.pdf
 *.v
 *.json
 *.fir
+.metals
+vivado_project
+programs/*.bin
+programs/*.out
