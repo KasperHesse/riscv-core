@@ -25,8 +25,8 @@ package object core {
     bw.close()
 
     //Compile and extract .text-segment
-    val gccOpts = s"-nostdlib -nostartfiles -march=rv32i -mabi=ilp32 -T programs/linker.ld  $file.s -o $file.o"
-    val objcopyOpts = s"-R \".note.gnu.build-id\" -O binary $file.o $file.bin"
+    val gccOpts = s"-nostdlib -nostartfiles -march=rv32i -mabi=ilp32 -T programs/linker.ld -Wl,--no-relax $file.s -o $file.o"
+    val objcopyOpts = s"-O binary $file.o $file.bin"
     val (gcc, objcopy) = if (System.getProperty("os.name").contains("Windows")) {
       ("riscv64-unknown-elf-gcc.exe", "riscv64-unknown-elf-objcopy.exe")
     } else {
@@ -42,7 +42,7 @@ package object core {
 //      s"riscv64-linux-gnu-objcopy -O binary $file.o $file.bin".!
 //    }
 
-    //Retrieve .text-segment, parse as int
+    //Retrieve .text and .data-segments, parse as int
     val fis = new FileInputStream(s"$file.bin")
     val bytes = fis.readAllBytes()
     fis.close()
