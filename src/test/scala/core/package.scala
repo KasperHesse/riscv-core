@@ -25,7 +25,7 @@ package object core {
     bw.close()
 
     //Compile and extract .text-segment
-    val gccOpts = s"-nostdlib -nostartfiles -march=rv32i -mabi=ilp32 -T programs/linker.ld -Wl,--no-relax $file.s -o $file.o"
+    val gccOpts = s"-nostdlib -nostartfiles -march=rv32i -mabi=ilp32 -c $file.s -o $file.o"
     val objcopyOpts = s"-O binary $file.o $file.bin"
     val (gcc, objcopy) = if (System.getProperty("os.name").contains("Windows")) {
       ("riscv64-unknown-elf-gcc.exe", "riscv64-unknown-elf-objcopy.exe")
@@ -438,11 +438,11 @@ package object core {
     buf.zipWithIndex.map { case (instr,i) => (i*4, instr) }.toMap
   }
 
-  def expectReg(dut: Core, i: Int, v: Int): Unit = {
+  def expectReg(dut: Core, i: Int, v: Int, msg: String = ""): Unit = {
     expectReg(dut, i, v.toLong & 0xffffffffL)
   }
 
-  def expectReg(dut: Core, i: Int, v: Long): Unit = {
-    dut.io.dbg.get.reg(i).expect(v.U)
+  def expectReg(dut: Core, i: Int, v: Long, msg: String = ""): Unit = {
+    dut.io.dbg.get.reg(i).expect(v.U, msg)
   }
 }

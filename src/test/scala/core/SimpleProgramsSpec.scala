@@ -14,6 +14,7 @@ class SimpleProgramsSpec extends AnyFlatSpec with ChiselScalatestTester with Mat
   it should "compute the sum of 1..100" in {
     val asm =
       """
+        |_start:
         |addi x1, x0, 1
         |add x2, x0, x0
         |addi x3, x0, 101
@@ -44,6 +45,7 @@ class SimpleProgramsSpec extends AnyFlatSpec with ChiselScalatestTester with Mat
   it should "write Hello World to serial output" in {
     val asm =
       """
+        |_start:
         |addi x1, x0, 72
         |addi x2, x0, 101
         |addi x3, x0, 108
