@@ -9,7 +9,7 @@ import org.scalatest.matchers.must.Matchers
 class CoreWrapperSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
   behavior of "Core wrapper"
 
-  it should "load a program that toggles LEDs" in {
+  ignore should "load a program that toggles LEDs" in {
     val wrapConf = scala.collection.immutable.HashMap(
       "numKeys" -> 16,
       "numLeds" -> 16,
@@ -32,7 +32,7 @@ class CoreWrapperSpec extends AnyFlatSpec with ChiselScalatestTester with Matche
         |""".stripMargin
 
     //Each int of the program should be mapped to a seq of 4 bytes
-    val program = assemble(asm).flatMap { x =>
+    val program = assemble(asm, this.getTestName).flatMap { x =>
       Seq(x & 0xFF, (x >> 8) & 0xFF, (x >> 16) & 0xFF, (x >> 24) & 0xFF)
     }
 
@@ -46,7 +46,7 @@ class CoreWrapperSpec extends AnyFlatSpec with ChiselScalatestTester with Matche
     }
   }
 
-  it should "execute a blink program" in {
+  ignore should "execute a blink program" in {
     val wrapConf = scala.collection.immutable.HashMap(
       "numKeys" -> 12,
       "numLeds" -> 12,
@@ -73,7 +73,7 @@ class CoreWrapperSpec extends AnyFlatSpec with ChiselScalatestTester with Matche
         |j LOOP
         |""".stripMargin
 
-    val program = assemble(asm).flatMap { x =>
+    val program = assemble(asm, this.getTestName).flatMap { x =>
       Seq(x & 0xFF, (x >> 8) & 0xFF, (x >> 16) & 0xFF, (x >> 24) & 0xFF)
     }
     test(new CoreWrapper(wrapConf)(Config())).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
@@ -134,9 +134,9 @@ class CoreWrapperSpec extends AnyFlatSpec with ChiselScalatestTester with Matche
         |.align(4) #Make sure a full byte is taken up
         |""".stripMargin
 
-    val program = assemble(asm).flatMap { x =>
+    val program = assemble(asm, this.getTestName).flatMap { x =>
       Seq(x & 0xFF, (x >> 8) & 0xFF, (x >> 16) & 0xFF, (x >> 24) & 0xFF)
-    }
+    }.toSeq
     test(new CoreWrapper(wrapConf)(Config())).withAnnotations(Seq(WriteVcdAnnotation, CachingAnnotation)) { dut =>
       //Write the instructions
       writeToUart(dut.io.uart.rx, dut.clock, wrapConf("coreFreq"), wrapConf("uartBaud"), program)

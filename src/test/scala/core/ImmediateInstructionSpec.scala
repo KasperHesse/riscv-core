@@ -175,7 +175,7 @@ class ImmediateInstructionSpec extends AnyFlatSpec with ChiselScalatestTester wi
     test(new Core()) {dut =>
       testFun(dut, 50, inst)
       for(i <- 0 until 30) {
-        expectReg(dut, i+1, ui(i) + 4*i, s"Expecting ${ui(i)+4*i} for pc=${4*i} and immediate ${ui(i)} in reg x${i+1}")
+        expectReg(dut, i+1, ui(i) + 4*i)
       }
     }
   }

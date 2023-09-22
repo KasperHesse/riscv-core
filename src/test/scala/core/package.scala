@@ -1,7 +1,7 @@
 import chisel3._
 import chiseltest._
 
-import java.io.{BufferedWriter, FileInputStream, FileWriter}
+import java.io.{BufferedWriter, File, FileInputStream, FileWriter}
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.sys.process._
@@ -16,8 +16,8 @@ package object core {
    * @param s The program to assemble
    * @return An array of Int, each Int representing one instruction to execute
    */
-  def assemble(s: String): Array[Int] = {
-    val file = "asm"
+  def assemble(s: String, fname: String): Array[Int] = {
+    val file = fname
 
     //Write contents to a file
     val bw = new BufferedWriter(new FileWriter(s"$file.s"))
@@ -46,6 +46,10 @@ package object core {
     val fis = new FileInputStream(s"$file.bin")
     val bytes = fis.readAllBytes()
     fis.close()
+    //Delete generated files
+    new File(s"$file.s").delete()
+    new File(s"$file.o").delete()
+
     bytes.grouped(4)
       .map(x => (x(0) & 0xff) | ((x(1) & 0xff) << 8) | ((x(2) & 0xff) << 16) | ((x(3) & 0xff) << 24))
       .toArray
@@ -56,8 +60,8 @@ package object core {
    * @param s The program to assemble
    * @return An int-int map, mapping from addresses to instructions
    */
-  def assembleMap(s: String): Map[Int, Int] = {
-    assemble(s).zipWithIndex.map{case (instr, i) => (i*4, instr)}.toMap
+  def assembleMap(s: String, fname: String): Map[Int, Int] = {
+    assemble(s, fname).zipWithIndex.map{case (instr, i) => (i*4, instr)}.toMap
   }
 
 
@@ -190,7 +194,7 @@ package object core {
     override def drive(): Unit = {
       val addr = port.req.addr.peekInt().toInt
       val d = Random.between(minDelay, maxDelay+1)
-//      println(s"Access to $addr, ack after $d")
+    //  println(s"Access to $addr, ack after $d")
       for (_ <- 1 to d) {
         clock.step()
         port.resp.ack.poke(false.B)
@@ -222,8 +226,6 @@ package object core {
     def apply(port: MemoryInterface, clock: Clock, instrs: Map[Int, Int])(implicit conf: Config): Seq[Icache] = {
       Seq(new Icache(port, clock, 0, 0xffff)(instrs))
     }
-
-    def apply(port: MemoryInterface, clock: Clock, asm: String)(implicit conf: Config): Seq[Icache] = this(port, clock, assembleMap(asm))
   }
 
   /**
@@ -438,11 +440,13 @@ package object core {
     buf.zipWithIndex.map { case (instr,i) => (i*4, instr) }.toMap
   }
 
-  def expectReg(dut: Core, i: Int, v: Int, msg: String = ""): Unit = {
+  def expectReg(dut: Core, i: Int, v: Int): Unit = {
     expectReg(dut, i, v.toLong & 0xffffffffL)
   }
 
-  def expectReg(dut: Core, i: Int, v: Long, msg: String = ""): Unit = {
-    dut.io.dbg.get.reg(i).expect(v.U, msg)
+  def expectReg(dut: Core, i: Int, v: Long): Unit = {
+    dut.io.dbg.get.reg(i).expect(v.U)
   }
 }
+//Failing: ImemSpec should function when ack is delayed
+//Failing: CoreWrapperSpec should load a program that toggles LEDs

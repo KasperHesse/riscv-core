@@ -2,13 +2,21 @@ package core
 
 import chisel3._
 import chiseltest._
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.must.Matchers
 
-class StypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
+import java.io.File
+
+class StypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers with BeforeAndAfterEach {
   behavior of "Memory instructions"
   
   implicit val conf: Config = defaultConf
+
+//  override def afterEach() = {
+//    val f = new File(s"${this.getTestName}.bin")
+//    f.del
+//  }
 
   it should "perform a SW/LW" in {
     val asm =
@@ -17,7 +25,7 @@ class StypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with M
         |sw x1, 20(x0)
         |lw x2, 20(x0)
         |""".stripMargin
-    val instrs = assembleMap(asm)
+    val instrs = assembleMap(asm, this.getTestName)
     test(new Core()).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
       val sh = SimulationHarness(dut, instrs)
       sh.run()
@@ -33,7 +41,7 @@ class StypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with M
       |sh x1, 20(x0)
       |lh x2, 20(x0)
       |""".stripMargin
-    val instrs = assembleMap(asm)
+    val instrs = assembleMap(asm, this.getTestName)
     test(new Core()) { dut =>
       val sh = SimulationHarness(dut, instrs)
       sh.run()
@@ -49,7 +57,7 @@ class StypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with M
       |sb x1, 20(x0)
       |lb x2, 20(x0)
       |""".stripMargin
-    val instrs = assembleMap(asm)
+    val instrs = assembleMap(asm, this.getTestName)
     test(new Core()) { dut =>
       val sh = SimulationHarness(dut, instrs)
       sh.run()
@@ -69,7 +77,7 @@ class StypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with M
         | lb x3, 0(x0)
         | lb x4, 4(x0)
         |""".stripMargin
-    val instrs = assembleMap(asm)
+    val instrs = assembleMap(asm, this.getTestName)
     test(new Core()) { dut =>
       val sh = SimulationHarness(dut, instrs)
       sh.run()
@@ -91,7 +99,7 @@ class StypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with M
         | lbu x3, 0(x0)
         | lbu x4, 4(x0)
         | """.stripMargin
-    val instrs = assembleMap(asm)
+    val instrs = assembleMap(asm, this.getTestName)
     test(new Core()) {dut =>
       val sh = SimulationHarness(dut, instrs)
       sh.run()
@@ -113,7 +121,7 @@ class StypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with M
         | lh x3, 0(x0)
         | lh x4, 4(x0)
         | """.stripMargin
-    val instrs = assembleMap(asm)
+    val instrs = assembleMap(asm, this.getTestName)
     test(new Core()) {dut =>
       val sh = SimulationHarness(dut, instrs)
       sh.run()
@@ -135,7 +143,7 @@ class StypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with M
         | lhu x3, 0(x0)
         | lhu x4, 4(x0)
         | """.stripMargin
-    val instrs = assembleMap(asm)
+    val instrs = assembleMap(asm, this.getTestName)
     test(new Core()) {dut =>
       val sh = SimulationHarness(dut, instrs)
       sh.run()
@@ -161,7 +169,7 @@ class StypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with M
         |lbu x8, 2(x0)
         |lbu x9, 3(x0)
         |""".stripMargin
-    val instr = assembleMap(asm)
+    val instr = assembleMap(asm, this.getTestName)
     test(new Core()) {dut =>
       val sh = SimulationHarness(dut, instr)
       sh.run()
@@ -194,7 +202,7 @@ class StypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with M
         |sb x5, 3(x0)
         |lw x6, 0(x0)
         |""".stripMargin
-    val instrs = assembleMap(asm)
+    val instrs = assembleMap(asm, this.getTestName)
     test(new Core()) {dut =>
       val sh = SimulationHarness(dut, instrs)
       sh.run()
@@ -225,7 +233,7 @@ class StypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with M
         |lw x6, 0(x0)
         |lw x7, 4(x0)
         |""".stripMargin
-    val instrs = assembleMap(asm)
+    val instrs = assembleMap(asm, this.getTestName)
     test(new Core) {dut =>
       val sh = SimulationHarness(dut, instrs)
       sh.run()
@@ -257,7 +265,7 @@ class StypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with M
         |addi x2, x2, 5
         |addi x3, x0, 10
         |""".stripMargin
-    val instrs = assembleMap(asm)
+    val instrs = assembleMap(asm, this.getTestName)
     test(new Core).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
       val sh = SimulationHarness(dut, instrs)
       sh.run()

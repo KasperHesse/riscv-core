@@ -28,7 +28,7 @@ class SimpleProgramsSpec extends AnyFlatSpec with ChiselScalatestTester with Mat
 
 
     test(new Core) {dut =>
-      val sh = SimulationHarness(dut, assembleMap(asm))
+      val sh = SimulationHarness(dut, assembleMap(asm, this.getTestName))
       //Each loop of add,addi,blt takes 5 clock cycles since branches are always mispredicted and pipeline must be flushed
       sh.setTimeout(600)
       sh.run()
@@ -79,7 +79,7 @@ class SimpleProgramsSpec extends AnyFlatSpec with ChiselScalatestTester with Mat
         |""".stripMargin
 
     test(new Core) { dut =>
-      val imem = MemAgent(dut.io.imem, Icache(dut.io.imem, dut.clock, assembleMap(asm)))
+      val imem = MemAgent(dut.io.imem, Icache(dut.io.imem, dut.clock, assembleMap(asm, this.getTestName)))
       val dmem = MemAgent(dut.io.dmem, Seq(new Dcache(dut.io.dmem, dut.clock, 0, 0xffff)()))
       dmem.register(new SoftwareSerialPort(dut.io.dmem, dut.clock, 0x10000, 0x10000))
 
