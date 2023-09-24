@@ -26,8 +26,9 @@ class DmemSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
          |""".stripMargin
 
     test(new Core).withAnnotations(Seq(WriteVcdAnnotation)) { dut =>
-      val imem = MemAgent(dut.io.imem, Icache(dut.io.imem, dut.clock, asm))
-      (assemble(asm) zip asm.split("\r\n")).zipWithIndex.foreach{case ((i,s),idx) => println(f"[${idx*4}%2d] $s: $i (${i.toHexString})")}
+
+      val imem = new MemAgent(dut.io.imem)
+      imem.register(new Icache(dut.io.imem, dut.clock, 0, 0xffff)(assembleMap(asm, this.getTestName)))
       val dmem = new MemAgent(dut.io.dmem)
       dmem.register(new DcacheWithDelay(dut.io.dmem, dut.clock, 0, 0xffff, 2, 4)())
       val sh = new SimulationHarness(dut, ListBuffer(imem, dmem))

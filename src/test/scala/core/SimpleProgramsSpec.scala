@@ -14,6 +14,7 @@ class SimpleProgramsSpec extends AnyFlatSpec with ChiselScalatestTester with Mat
   it should "compute the sum of 1..100" in {
     val asm =
       """
+        |_start:
         |addi x1, x0, 1
         |add x2, x0, x0
         |addi x3, x0, 101
@@ -27,7 +28,7 @@ class SimpleProgramsSpec extends AnyFlatSpec with ChiselScalatestTester with Mat
 
 
     test(new Core) {dut =>
-      val sh = SimulationHarness(dut, assembleMap(asm))
+      val sh = SimulationHarness(dut, assembleMap(asm, this.getTestName))
       //Each loop of add,addi,blt takes 5 clock cycles since branches are always mispredicted and pipeline must be flushed
       sh.setTimeout(600)
       sh.run()
@@ -44,6 +45,7 @@ class SimpleProgramsSpec extends AnyFlatSpec with ChiselScalatestTester with Mat
   it should "write Hello World to serial output" in {
     val asm =
       """
+        |_start:
         |addi x1, x0, 72
         |addi x2, x0, 101
         |addi x3, x0, 108
@@ -77,7 +79,7 @@ class SimpleProgramsSpec extends AnyFlatSpec with ChiselScalatestTester with Mat
         |""".stripMargin
 
     test(new Core) { dut =>
-      val imem = MemAgent(dut.io.imem, Icache(dut.io.imem, dut.clock, assembleMap(asm)))
+      val imem = MemAgent(dut.io.imem, Icache(dut.io.imem, dut.clock, assembleMap(asm, this.getTestName)))
       val dmem = MemAgent(dut.io.dmem, Seq(new Dcache(dut.io.dmem, dut.clock, 0, 0xffff)()))
       dmem.register(new SoftwareSerialPort(dut.io.dmem, dut.clock, 0x10000, 0x10000))
 

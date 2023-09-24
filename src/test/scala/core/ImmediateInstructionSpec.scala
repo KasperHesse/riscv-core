@@ -8,7 +8,7 @@ import scala.collection.mutable.ListBuffer
 
 class ImmediateInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers {
   behavior of "I-type instruction"
-  
+
   implicit val conf: Config = defaultConf
 
   /**
@@ -33,7 +33,6 @@ class ImmediateInstructionSpec extends AnyFlatSpec with ChiselScalatestTester wi
     }
     for(i <- 17 until 32) {
       r(i) = op(r(i-16), lb(i-2).asInstanceOf[ItypeInstruction].imm.litValue.toInt)
-      println(f"x${i}, v1=${r(i-16)}, v2=${lb(i-2).asInstanceOf[ItypeInstruction].imm.litValue.toInt}, res=${r(i)}")
     }
     r
   }
@@ -176,7 +175,6 @@ class ImmediateInstructionSpec extends AnyFlatSpec with ChiselScalatestTester wi
     test(new Core()) {dut =>
       testFun(dut, 50, inst)
       for(i <- 0 until 30) {
-        println(s"Expecting ${ui(i)+4*i} for pc=${4*i} and immediate ${ui(i)} in reg x${i+1}")
         expectReg(dut, i+1, ui(i) + 4*i)
       }
     }

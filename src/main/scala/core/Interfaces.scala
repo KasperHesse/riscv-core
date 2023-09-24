@@ -139,8 +139,8 @@ class MemoryResponse(implicit conf: Config) extends Bundle {
  * @param conf
  */
 class MemoryInterface(implicit conf: Config) extends Bundle {
-  val out = Output(new MemoryRequest)
-  val in = Input(new MemoryResponse)
+  val req = Output(new MemoryRequest)
+  val resp = Input(new MemoryResponse)
 }
 
 /**

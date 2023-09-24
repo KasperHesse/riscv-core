@@ -1,7 +1,7 @@
 import chisel3._
 import chiseltest._
 
-import java.io.{BufferedWriter, FileInputStream, FileWriter}
+import java.io.{BufferedWriter, File, FileInputStream, FileWriter}
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.sys.process._
@@ -16,8 +16,8 @@ package object core {
    * @param s The program to assemble
    * @return An array of Int, each Int representing one instruction to execute
    */
-  def assemble(s: String): Array[Int] = {
-    val file = "asm"
+  def assemble(s: String, fname: String): Array[Int] = {
+    val file = fname
 
     //Write contents to a file
     val bw = new BufferedWriter(new FileWriter(s"$file.s"))
@@ -25,18 +25,31 @@ package object core {
     bw.close()
 
     //Compile and extract .text-segment
-    if(System.getProperty("os.name").contains("Windows")) {
-      s"riscv64-unknown-elf-gcc.exe -march=rv32i -mabi=ilp32 -c $file.s -o $file.o".! //compile
-      s"riscv64-unknown-elf-objcopy.exe -O binary $file.o $file.bin".! //extract
-    } else { //Assuming Linux
-      s"riscv64-linux-gnu-gcc -march=rv32i -mabi=ilp32 -c $file.s -o $file.o".!
-      s"riscv64-linux-gnu-objcopy -O binary $file.o $file.bin".!
+    val gccOpts = s"-nostdlib -nostartfiles -march=rv32i -mabi=ilp32 -c $file.s -o $file.o"
+    val objcopyOpts = s"-O binary $file.o $file.bin"
+    val (gcc, objcopy) = if (System.getProperty("os.name").contains("Windows")) {
+      ("riscv64-unknown-elf-gcc.exe", "riscv64-unknown-elf-objcopy.exe")
+    } else {
+      ("riscv64-linux-gnu-gcc", "riscv64-linux-gnu-objcopy")
     }
+    s"$gcc $gccOpts".!
+    s"$objcopy $objcopyOpts".!
+//    if(System.getProperty("os.name").contains("Windows")) {
+//      s"riscv64-unknown-elf-gcc.exe $gccOpts".! //compile
+//      s"riscv64-unknown-elf-objcopy.exe $objcopyOpts".! //extract
+//    } else { //Assuming Linux
+//      s"riscv64-linux-gnu-gcc -march=rv32i -mabi=ilp32 -c $file.s -o $file.o".!
+//      s"riscv64-linux-gnu-objcopy -O binary $file.o $file.bin".!
+//    }
 
-    //Retrieve .text-segment, parse as int
+    //Retrieve .text and .data-segments, parse as int
     val fis = new FileInputStream(s"$file.bin")
     val bytes = fis.readAllBytes()
     fis.close()
+    //Delete generated files
+    new File(s"$file.s").delete()
+    new File(s"$file.o").delete()
+
     bytes.grouped(4)
       .map(x => (x(0) & 0xff) | ((x(1) & 0xff) << 8) | ((x(2) & 0xff) << 16) | ((x(3) & 0xff) << 24))
       .toArray
@@ -47,8 +60,8 @@ package object core {
    * @param s The program to assemble
    * @return An int-int map, mapping from addresses to instructions
    */
-  def assembleMap(s: String): Map[Int, Int] = {
-    assemble(s).zipWithIndex.map{case (instr, i) => (i*4, instr)}.toMap
+  def assembleMap(s: String, fname: String): Map[Int, Int] = {
+    assemble(s, fname).zipWithIndex.map{case (instr, i) => (i*4, instr)}.toMap
   }
 
 
@@ -83,17 +96,17 @@ package object core {
     require(minDelay > 0, s"Dcache cannot acknowledge on same cycle as request. minDelay must be >0, is $minDelay")
     require(maxDelay >= minDelay, s"Dcache maxDelay must be >= minDelay ($minDelay), is $maxDelay")
     override def drive(): Unit = {
-      val we = port.out.we.peekBoolean()
-      val wmask = port.out.wmask.peek().asBools.map(_.litToBoolean)
-      val addr = port.out.addr.peekInt().toInt
-      val wdata = port.out.wdata.peekInt().toInt
+      val we = port.req.we.peekBoolean()
+      val wmask = port.req.wmask.peek().asBools.map(_.litToBoolean)
+      val addr = port.req.addr.peekInt().toInt
+      val wdata = port.req.wdata.peekInt().toInt
 
       val d = Random.between(minDelay, maxDelay+1)
       for(_ <- 1 to d) {
         clock.step()
-        port.in.ack.poke(false.B)
+        port.resp.ack.poke(false.B)
       }
-      port.in.ack.poke(true.B)
+      port.resp.ack.poke(true.B)
       if (we) {
         for (i <- 0 until conf.WMASKLEN) {
           if (wmask(i)) {
@@ -105,7 +118,7 @@ package object core {
         for (i <- 0 until conf.WMASKLEN) {
           r |= (data.getOrElse(addr + i, 0.toByte) & 0xff) << 8 * i
         }
-        port.in.rdata.poke(r & 0xffffffffL)
+        port.resp.rdata.poke(r & 0xffffffffL)
       }
     }
   }
@@ -139,13 +152,13 @@ package object core {
   class SoftwareSerialPort(port: MemoryInterface, clock: Clock, low: Int, high: Int)
                            (implicit conf: Config) extends PortDriver(port, low, high) {
     override def drive(): Unit = {
-      val we = port.out.we.peekBoolean()
-      val wdata = port.out.wdata.peekInt().toInt
-      val wmask = port.out.wmask.peek().asBools.map(_.litToBoolean)
+      val we = port.req.we.peekBoolean()
+      val wdata = port.req.wdata.peekInt().toInt
+      val wmask = port.req.wmask.peek().asBools.map(_.litToBoolean)
       val chars = Seq.tabulate(4)(i => ((wdata >> i*8) & 0xFF).toChar)
 
       clock.step()
-      port.in.ack.poke(true.B)
+      port.resp.ack.poke(true.B)
 
       if(we) {
         //Write the bytes that are high to serial-out
@@ -179,15 +192,15 @@ package object core {
 
     val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM).litValue.toInt
     override def drive(): Unit = {
-      val addr = port.out.addr.peekInt().toInt
+      val addr = port.req.addr.peekInt().toInt
       val d = Random.between(minDelay, maxDelay+1)
-//      println(s"Access to $addr, ack after $d")
+    //  println(s"Access to $addr, ack after $d")
       for (_ <- 1 to d) {
         clock.step()
-        port.in.ack.poke(false.B)
+        port.resp.ack.poke(false.B)
       }
-      port.in.ack.poke(true.B)
-      port.in.rdata.poke(instrs.getOrElse(addr, nop).toLong & 0xffff_ffffL)
+      port.resp.ack.poke(true.B)
+      port.resp.rdata.poke(instrs.getOrElse(addr, nop).toLong & 0xffff_ffffL)
     }
 
     def genRand(minl: Int, maxl: Int): Int = {
@@ -213,8 +226,6 @@ package object core {
     def apply(port: MemoryInterface, clock: Clock, instrs: Map[Int, Int])(implicit conf: Config): Seq[Icache] = {
       Seq(new Icache(port, clock, 0, 0xffff)(instrs))
     }
-
-    def apply(port: MemoryInterface, clock: Clock, asm: String)(implicit conf: Config): Seq[Icache] = this(port, clock, assembleMap(asm))
   }
 
   /**
@@ -249,15 +260,15 @@ package object core {
    */
   class MemAgent(port: MemoryInterface)(implicit conf: Config) extends SimulationAgent(port) {
     override def run(dut: Core): Unit = {
-      port.in.ack.poke(false.B)
-      port.in.rdata.poke(0.U)
+      port.resp.ack.poke(false.B)
+      port.resp.rdata.poke(0.U)
       while(!this.finish) {
-        if (!port.out.req.peekBoolean()) {
+        if (!port.req.req.peekBoolean()) {
           dut.clock.step()
-          port.in.ack.poke(false.B)
-          port.in.rdata.poke(0.U)
+          port.resp.ack.poke(false.B)
+          port.resp.rdata.poke(0.U)
         } else {
-          val addr = port.out.addr.peekInt().toInt
+          val addr = port.req.addr.peekInt().toInt
           for (pd <- pds) {
             if (pd.low <= addr && addr <= pd.high) {
               pd.drive()
@@ -273,6 +284,43 @@ package object core {
       val ma = new MemAgent(port)
       ma.register(pds)
       ma
+    }
+  }
+
+  /**
+   * Write a single value onto a UART receiver
+   * @param rx The UART's rx pin
+   * @param clock The clock of the system
+   * @param freq The clock frequency of the system
+   * @param baud The baudrate of the UART receiver
+   * @param value THe values to write out. All values should be 0<=v<=255
+   */
+  def writeToUart(rx: Bool, clock: Clock, freq: Int, baud: Int, value: Int): Unit = {
+    val cyclesPerBaud = freq/baud
+    val txData = 0x600 | ((value & 0xFF) << 1)
+    for(i <- 0 until 11) {
+      val tx = (txData >> i) & 1
+      rx.poke(tx.B)
+      clock.step(cyclesPerBaud)
+    }
+    rx.poke(true.B)
+  }
+  /**
+   * Write a stream of values onto a UART receiver
+   * @param rx The UART's rx pin
+   * @param clock The clock of the system
+   * @param freq The clock frequency of the system
+   * @param baud The baudrate of the UART receiver
+   * @param values THe values to write out. All values should be 0<=v<=255
+   */
+  def writeToUart(rx: Bool, clock: Clock, freq: Int, baud: Int, values: Seq[Int]): Unit = {
+    for(group <- values.grouped(255)) {
+      writeToUart(rx, clock, freq, baud, group.length)
+      group.foreach(v => writeToUart(rx, clock, freq, baud, v))
+    }
+    //If exactly a multiple of 255, should send 0 afterwards to move into GO state
+    if (values.length % 255 == 0) {
+      writeToUart(rx, clock, freq, baud, 0)
     }
   }
 
@@ -350,14 +398,14 @@ package object core {
    */
   def driveInstructionMemory(instrs: Map[Int, Instruction], clock: Clock, imem: MemoryInterface): Unit = {
     val nop = ItypeInstruction(0, 0, 0, Funct3.ADDI, Opcode.OP_IMM)
-    while(!imem.out.req.peekBoolean()) {
+    while(!imem.req.req.peekBoolean()) {
       clock.step()
-      imem.in.ack.poke(false.B)
+      imem.resp.ack.poke(false.B)
     }
-    val addr = imem.out.addr.peekInt()
+    val addr = imem.req.addr.peekInt()
     clock.step()
-    imem.in.rdata.poke(instrs.getOrElse(addr.toInt, nop).toUInt)
-    imem.in.ack.poke(true.B)
+    imem.resp.rdata.poke(instrs.getOrElse(addr.toInt, nop).toUInt)
+    imem.resp.ack.poke(true.B)
   }
 
   /**
@@ -400,3 +448,5 @@ package object core {
     dut.io.dbg.get.reg(i).expect(v.U)
   }
 }
+//Failing: ImemSpec should function when ack is delayed
+//Failing: CoreWrapperSpec should load a program that toggles LEDs

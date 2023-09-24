@@ -23,12 +23,9 @@ class ImmediateGeneratorSpec extends AnyFlatSpec with ChiselScalatestTester with
   def testFun(dut: ImmediateGenerator, imm: => Int, m: Int => Instruction): Unit = {
     for(_ <- 0 until 10) {
       val i = imm
-      println(f"Poking immediate $i")
       val inst = m(i)
-      println(f"Instruction is $inst / ${inst.toUInt}")
       dut.io.instr.poke(inst.toUInt)
       dut.clock.step()
-      println(f"Peeking immediate ${dut.io.imm.peek()}")
       dut.io.imm.expect(i.toLong & 0xffff_ffffL)
       dut.clock.step()
     }

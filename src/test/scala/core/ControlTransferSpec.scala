@@ -25,7 +25,7 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
         |L2: nop
         |""".stripMargin
     test(new Core) {dut =>
-      val sh = SimulationHarness(dut, assembleMap(asm))
+      val sh = SimulationHarness(dut, assembleMap(asm, this.getTestName))
       sh.run()
       expectReg(dut, 2, 15)
       expectReg(dut, 1, 8)
@@ -48,7 +48,7 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
         |""".stripMargin
 
     test(new Core) {dut =>
-      val sh = SimulationHarness(dut, assembleMap(asm))
+      val sh = SimulationHarness(dut, assembleMap(asm, this.getTestName))
       sh.run()
       expectReg(dut, 1, 28)
       expectReg(dut, 2, 2)
@@ -75,7 +75,7 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
         |L2: nop
         |""".stripMargin
     test(new Core) {dut =>
-      val sh = SimulationHarness(dut, assembleMap(asm))
+      val sh = SimulationHarness(dut, assembleMap(asm, this.getTestName))
       sh.run()
       expectReg(dut, 1, 12)
       expectReg(dut, 2, 15)
@@ -98,7 +98,7 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
         |L3: addi x5, x0 ,5
         |""".stripMargin
     test(new Core) {dut =>
-      val sh = SimulationHarness(dut, assembleMap(asm))
+      val sh = SimulationHarness(dut, assembleMap(asm, this.getTestName))
       sh.run()
       expectReg(dut, 1, 32)
       expectReg(dut, 2, 2)
@@ -125,7 +125,7 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
         |""".stripMargin
 
     test(new Core) {dut =>
-      val sh = SimulationHarness(dut, assembleMap(asm))
+      val sh = SimulationHarness(dut, assembleMap(asm, this.getTestName))
       sh.run()
       expectReg(dut, 2, 15)
       expectReg(dut, 3, 2)
@@ -149,7 +149,7 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
         |""".stripMargin
 
     test(new Core) {dut =>
-      val sh = SimulationHarness(dut, assembleMap(asm))
+      val sh = SimulationHarness(dut, assembleMap(asm, this.getTestName))
       sh.run()
       expectReg(dut, 2, 15)
       expectReg(dut, 3, 30)

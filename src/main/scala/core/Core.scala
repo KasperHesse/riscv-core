@@ -33,8 +33,8 @@ class Core(implicit conf: Config) extends Module {
 
   //Memory connections
   io.imem <> fetch.io.mem
-  io.dmem.out <> execute.io.mem
-  io.dmem.in <> memory.io.mem
+  io.dmem.req <> execute.io.mem
+  io.dmem.resp <> memory.io.mem
 
   //Control signals and hazard detection
   fetch.io.ctrl.loadPC := execute.io.fetch.loadPC

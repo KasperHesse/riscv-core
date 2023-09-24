@@ -34,7 +34,6 @@ class RtypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with M
     }
     for(i <- 17 until 32) {
       r(i) = op(r(i-16), r(i-15))
-      println(f"x${i}, v1=${r(i-16)}, v2=${r(i-15)}, res=${r(i)}")
     }
     r
   }
