@@ -1,12 +1,19 @@
 import serial
-import sys
+import argparse
 
 def do_download():
-  print(sys.argv)
-  with open(f"programs/{sys.argv[2]}.bin", "rb") as f:
-    port = sys.argv[1]
-    print(f"Opening serial port {port}")
-    ser = serial.Serial(port, 115200, timeout=1)
+  parser = argparse.ArgumentParser(
+    description="Download binary files over UART to a RISC-V core",
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter
+  )
+  parser.add_argument("port", type=str, help="Serial port over which the file should be downloaded")
+  parser.add_argument("path", type=str, help="Relative path to binary file that should be downloaded. Relative to directory where downloader is run")
+  parser.add_argument("-b", "--baudrate", type=int, default=115200, help="Baudrate of the serial connection that is used for downloading")
+
+  args = parser.parse_args()
+  with open(args.path, "rb") as f:
+    print(f"Opening serial port {args.port} with baudrate {args.baudrate}")
+    ser = serial.Serial(args.port, args.baudrate, timeout=1)
     tx = f.read()
     bundles = [tx[i:i+255] for i in range(0, len(tx), 255)]
     for bnd in bundles:
@@ -20,9 +27,6 @@ def do_download():
       ser.write(bytes([0]))
       print("Wrote 0 for last block")
     print("Finished writing data")
-    print(f"Data from OS UART buffer: {ser.read_all()}")
-  # port = serial.Serial(sys.argv[1], 115200, timeout=1)
-  # print(port.read(8))
 
 if __name__ == "__main__":
   do_download()

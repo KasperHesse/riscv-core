@@ -1,7 +1,7 @@
-.globl _start
+.globl main
 
 .text
-_start:
+main:
 li x1, 0        # Blink value
 li x2, 0        # Counter value
 li x3, 4000000  #Max count value
