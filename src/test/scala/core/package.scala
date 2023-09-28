@@ -34,13 +34,6 @@ package object core {
     }
     s"$gcc $gccOpts".!
     s"$objcopy $objcopyOpts".!
-//    if(System.getProperty("os.name").contains("Windows")) {
-//      s"riscv64-unknown-elf-gcc.exe $gccOpts".! //compile
-//      s"riscv64-unknown-elf-objcopy.exe $objcopyOpts".! //extract
-//    } else { //Assuming Linux
-//      s"riscv64-linux-gnu-gcc -march=rv32i -mabi=ilp32 -c $file.s -o $file.o".!
-//      s"riscv64-linux-gnu-objcopy -O binary $file.o $file.bin".!
-//    }
 
     //Retrieve .text and .data-segments, parse as int
     val fis = new FileInputStream(s"$file.bin")
@@ -49,6 +42,7 @@ package object core {
     //Delete generated files
     new File(s"$file.s").delete()
     new File(s"$file.o").delete()
+    new File(s"$file.bin").delete()
 
     bytes.grouped(4)
       .map(x => (x(0) & 0xff) | ((x(1) & 0xff) << 8) | ((x(2) & 0xff) << 16) | ((x(3) & 0xff) << 24))

@@ -1,10 +1,10 @@
 .equ UART_BASE,    0x01000000
 .equ UART_TX,      0x01000010
 .equ UART_TX_FULL, 0x01000014
-.globl _start
+.globl main
 
 .text
-_start:
+main:
 la x1, HELLO_WORLD
 lb x2, 0(x1) #Initial fetch to simplify loop
 lui x3, %hi(UART_TX)

@@ -351,3 +351,5 @@ asm.s
 vivado_project
 programs/*.bin
 programs/*.out
+.bloop
+metals.sbt
