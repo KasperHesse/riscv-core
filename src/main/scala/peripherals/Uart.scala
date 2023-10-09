@@ -11,6 +11,7 @@
 package peripherals
 
 import chisel3._
+import circt.stage.ChiselStage
 import chisel3.util._
 import core.{Config, MemoryInterface, MemoryRequest, MemoryResponse}
 
@@ -245,6 +246,7 @@ class UartWrapper(frequency: Int,
 }
 
 object UartMain extends App {
-  (new chisel3.stage.ChiselStage).emitVerilog(new Uart(100_000_000, 115200, 2, 2), Array("--target-dir", "generated"))
+
+  ChiselStage.emitSystemVerilogFile(new Uart(100_000_000, 115200, 2, 2), Array("--target-dir", "generated"))
 }
 

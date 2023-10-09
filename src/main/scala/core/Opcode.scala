@@ -1,7 +1,7 @@
 package core
 
 import chisel3._
-import chisel3.experimental.ChiselEnum
+import chisel3.ChiselEnum
 
 object Funct3 {
   val ZERO, ADDI, JALR, BEQ, LB, SB, ADD, SUB, FENCE, ECALL, EBREAK = 0
