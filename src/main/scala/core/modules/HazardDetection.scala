@@ -46,7 +46,7 @@ class HazardDetection extends Module {
   io.MEM.stall := false.B
 
   //Delayed memory response
-  //If a memory operation is not ACK'd on cycle after issuing it, IF, ID and EX stages must be stalled.
+  //If a memory operation is not ACK'd on cycle after issuing it, IF, ID, EX and MEM stages must be stalled.
   //Must be kept stalled until ACK arrives
   when (io.MEM.memOp && !io.MEM.ack) {
     io.IF.stall := true.B
@@ -70,6 +70,10 @@ class HazardDetection extends Module {
     io.ID.flush := true.B
     io.IF.flush := true.B
   }
+
+  //CSR instruction: When instruction in EX is a CSR, we stall IF, ID and EX until MEM, WB are invalid.
+  //
+
   /*
   HAZARD AVOIDANCE
   Load-use: When EX.memRead && EX.rd == (ID.rs1 || ID.rs2) && EX.rd=!=0, stall IF and ID
