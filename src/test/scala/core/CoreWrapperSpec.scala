@@ -38,7 +38,7 @@ class CoreWrapperSpec extends AnyFlatSpec with ChiselScalatestTester with Matche
 
     test(new CoreWrapper(wrapConf)(Config())).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
       //Write the instructions
-      writeToUart(dut.io.uart.rx, dut.clock, 2, 1, program)
+      writeToUart(dut.io.uart.rx, dut.clock, 2, 1, program.toSeq)
       //Wait 50 cc, just because
       dut.clock.step(50)
       //Should see output on leds
@@ -78,7 +78,7 @@ class CoreWrapperSpec extends AnyFlatSpec with ChiselScalatestTester with Matche
     }
     test(new CoreWrapper(wrapConf)(Config())).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
       //Write the instructions
-      writeToUart(dut.io.uart.rx, dut.clock, wrapConf("coreFreq"), wrapConf("uartBaud"), program)
+      writeToUart(dut.io.uart.rx, dut.clock, wrapConf("coreFreq"), wrapConf("uartBaud"), program.toSeq)
       //Wait 200 cc, just because
       dut.clock.step(200)
       //Should see output on leds

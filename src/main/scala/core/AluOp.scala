@@ -1,7 +1,7 @@
 package core
 
 import chisel3._
-import chisel3.experimental.ChiselEnum
+import chisel3.ChiselEnum
 
 object AluOp extends ChiselEnum {
   val ADD = Value("b0000".U)

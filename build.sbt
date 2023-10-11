@@ -4,15 +4,14 @@ ThisBuild / scalaVersion     := "2.13.7"
 ThisBuild / version          := "0.1.0"
 ThisBuild / organization     := "Kasper Hesse"
 
-val chiselVersion = "3.5.4"
+val chiselVersion = "5.0.0"
 
 lazy val root = (project in file("."))
   .settings(
     name := "Risc-V Core",
     libraryDependencies ++= Seq(
-      "edu.berkeley.cs" %% "chisel3" % chiselVersion,
-      "edu.berkeley.cs" %% "chiseltest" % "0.5.4" % "test",
-      "com.lihaoyi" %% "os-lib" % "0.8.1"
+      "org.chipsalliance" %% "chisel" % chiselVersion,
+      "edu.berkeley.cs" %% "chiseltest" % "5.0.0" % "test"
     ),
     scalacOptions ++= Seq(
       "-language:reflectiveCalls",
@@ -20,6 +19,6 @@ lazy val root = (project in file("."))
       "-feature",
       "-Xcheckinit",
     ),
-    addCompilerPlugin("edu.berkeley.cs" % "chisel3-plugin" % chiselVersion cross CrossVersion.full),
+    addCompilerPlugin("org.chipsalliance" % "chisel-plugin" % chiselVersion cross CrossVersion.full),
   )
 
