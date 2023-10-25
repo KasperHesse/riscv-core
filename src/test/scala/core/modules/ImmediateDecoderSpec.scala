@@ -1,12 +1,12 @@
 package core.modules
 
 import chiseltest._
-import core.stages.ImmediateGenerator
+import core.stages.ImmediateDecoder
 import core._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.must.Matchers
 
-class ImmediateGeneratorSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers{
+class ImmediateDecoderSpec extends AnyFlatSpec with ChiselScalatestTester with Matchers{
   behavior of "Immediate generator"
 
   val MAX_12BIT = math.pow(2,12).toInt
@@ -20,7 +20,7 @@ class ImmediateGeneratorSpec extends AnyFlatSpec with ChiselScalatestTester with
    * @param imm A function that generates a valid immediate
    * @param m a function taking the generated immediate and returning an Instruction
    */
-  def testFun(dut: ImmediateGenerator, imm: => Int, m: Int => Instruction): Unit = {
+  def testFun(dut: ImmediateDecoder, imm: => Int, m: Int => Instruction): Unit = {
     for(_ <- 0 until 10) {
       val i = imm
       val inst = m(i)
@@ -32,7 +32,7 @@ class ImmediateGeneratorSpec extends AnyFlatSpec with ChiselScalatestTester with
   }
 
   it should "generate immediates for OP_IMM instructions" in {
-    test(new ImmediateGenerator()(conf)) {dut =>
+    test(new ImmediateDecoder()(conf)) { dut =>
       testFun(dut,
         scala.util.Random.nextInt(MAX_12BIT)-MAX_12BIT/2,
         x => ItypeInstruction(x, 0, 0, 0, Opcode.OP_IMM)
@@ -41,7 +41,7 @@ class ImmediateGeneratorSpec extends AnyFlatSpec with ChiselScalatestTester with
   }
 
   it should "generate immediates for LOAD instructions" in {
-    test(new ImmediateGenerator()(conf)) {dut =>
+    test(new ImmediateDecoder()(conf)) { dut =>
       testFun(dut,
         scala.util.Random.nextInt(MAX_12BIT)-MAX_12BIT/2,
         x => ItypeInstruction(x, 0, 0, 0, Opcode.LOAD)
@@ -50,7 +50,7 @@ class ImmediateGeneratorSpec extends AnyFlatSpec with ChiselScalatestTester with
   }
 
   it should "generate immediates for STORE instructions" in {
-    test(new ImmediateGenerator()(conf)) {dut =>
+    test(new ImmediateDecoder()(conf)) { dut =>
       testFun(dut,
         scala.util.Random.nextInt(MAX_12BIT)-MAX_12BIT/2,
         x => StypeInstruction(x, 0, 0, 0, Opcode.STORE)
@@ -59,7 +59,7 @@ class ImmediateGeneratorSpec extends AnyFlatSpec with ChiselScalatestTester with
   }
 
   it should "generate immediates for BRANCH instructions" in {
-    test(new ImmediateGenerator()(conf)) {dut =>
+    test(new ImmediateDecoder()(conf)) { dut =>
       testFun(dut,
         (scala.util.Random.nextInt(MAX_12BIT)-MAX_12BIT/2) << 1,
         x => BtypeInstruction(x, 0, 0, 0, Opcode.BRANCH
@@ -69,7 +69,7 @@ class ImmediateGeneratorSpec extends AnyFlatSpec with ChiselScalatestTester with
   }
 
   it should "generate immediates for LUI instructions" in {
-    test(new ImmediateGenerator()(conf)) {dut =>
+    test(new ImmediateDecoder()(conf)) { dut =>
       testFun(dut,
         scala.util.Random.nextInt() & 0xfffff000,
         x => UtypeInstruction(x, 0, Opcode.LUI))
@@ -77,7 +77,7 @@ class ImmediateGeneratorSpec extends AnyFlatSpec with ChiselScalatestTester with
   }
 
   it should "generate immediates for AUIPC instructions" in {
-    test(new ImmediateGenerator()(conf)) {dut =>
+    test(new ImmediateDecoder()(conf)) { dut =>
       testFun(dut,
         scala.util.Random.nextInt() & 0xfffff000,
         x => UtypeInstruction(x, 0, Opcode.AUIPC)
@@ -86,7 +86,7 @@ class ImmediateGeneratorSpec extends AnyFlatSpec with ChiselScalatestTester with
   }
 
   it should "generate immediates for JAL instructions" in {
-    test(new ImmediateGenerator()(conf)) { dut =>
+    test(new ImmediateDecoder()(conf)) { dut =>
       testFun(dut,
         (scala.util.Random.nextInt(MAX_20BIT) - MAX_20BIT / 2) & ~1,
         x => JtypeInstruction(x, 0, Opcode.JAL)
@@ -95,7 +95,7 @@ class ImmediateGeneratorSpec extends AnyFlatSpec with ChiselScalatestTester with
   }
 
   it should "generate immediates for JALR instructions" in {
-    test(new ImmediateGenerator()(conf)) { dut =>
+    test(new ImmediateDecoder()(conf)) { dut =>
       testFun(dut,
         scala.util.Random.nextInt(MAX_12BIT) - MAX_12BIT/2,
         x => ItypeInstruction(x, 0, 0, 0, Opcode.JALR)

@@ -27,10 +27,10 @@ class Execute(implicit conf: Config) extends PipelineStage {
   })
 
   //MODULES
-  val alu = Module(new ALU)
   val fwd = Module(new ForwardingUnit)
+  val alu = Module(new ALU)
 
-  /** Pipeline register */
+  //PIPELINE REGISTER
   val id = RegInit(0.U(io.id.getWidth.W).asTypeOf(io.id))
   when (!io.hzd.stall) {
     id := io.id
@@ -40,13 +40,13 @@ class Execute(implicit conf: Config) extends PipelineStage {
     id.v2 := fwd.io.v2
   }
 
-  fwd.io.IDrs1 := id.rs1
-  fwd.io.IDrs2 := id.rs2
+  //FORWARDING CONTROLS
+  fwd.io.IDrs1 := id.alu.rs1
+  fwd.io.IDrs2 := id.alu.rs2
   fwd.io.IDv1 := id.v1
   fwd.io.IDv2 := id.v2
   fwd.io.mem := io.memFwd
   fwd.io.wb := io.wbFwd
-
   val v1 = fwd.io.v1
   val v2 = fwd.io.v2
 
@@ -55,33 +55,41 @@ class Execute(implicit conf: Config) extends PipelineStage {
   val lt = v1.asSInt < v2.asSInt
   val ltu = v1 < v2
 
-  val beq = eq && (id.aluOp.asUInt(2,0) === 0.U(3.W))
-  val bne = !eq && (id.aluOp.asUInt(2,0) === 1.U(3.W))
-  val blt = lt && (id.aluOp.asUInt(2,0) === 4.U(3.W))
-  val bge = !lt && (id.aluOp.asUInt(2,0) === 5.U(3.W))
-  val bltu =ltu && (id.aluOp.asUInt(2,0) === 6.U(3.W))
-  val bgeu = !ltu && (id.aluOp.asUInt(2,0) === 7.U(3.W))
+  val beq  = eq   && id.alu.branchOp(0)
+  val bne  = !eq  && id.alu.branchOp(1)
+  val blt  = lt   && id.alu.branchOp(2)
+  val bge  = !lt  && id.alu.branchOp(3)
+  val bltu = ltu  && id.alu.branchOp(4)
+  val bgeu = !ltu && id.alu.branchOp(5)
 
-  val loadPC = (id.ctrl.branch && (beq | bne | blt | bge | bltu | bgeu)) | id.ctrl.jump
+  val loadPC = (id.alu.branch && (beq | bne | blt | bge | bltu | bgeu)) | id.alu.jump
   //We always set the LSB to 0 since JAL, branches already have 0's in the LSB and JALR requires a 0
-  val newPC = Cat((Mux(id.pcNextSrc, v1, id.pc) + id.imm)(conf.XLEN-1,1), 0.U(1.W))
+  val newPC = (Mux(id.alu.newPCsrc, v1, id.pc) + id.alu.imm)(conf.XLEN-1,1) ## 0.U(1.W)
 
 
   //ALU FOR CALCULATING REGISTER RESULTS
-  //TODO increase bitwidth of op2src to 2, make op1src a signal as well
-  // Will allow us to easier implement JAL and JALR instructions
-  alu.io.v1 := v1
-  alu.io.v2 := Mux(id.ctrl.op2src, v2, id.imm)
-  alu.io.op := id.aluOp
+  alu.io.v1 := MuxLookup(id.alu.op1Src, v1)(Seq(
+    (OpSrc.REG, v1),
+    (OpSrc.PC, id.pc),
+    (OpSrc.IMM, id.alu.imm),
+    (OpSrc.CONST, 0.U(conf.XLEN.W))
+  ))
+  alu.io.v2 := MuxLookup(id.alu.op2Src, v2)(Seq(
+    (OpSrc.REG, v2),
+    (OpSrc.PC, id.pc),
+    (OpSrc.IMM, id.alu.imm),
+    (OpSrc.CONST, 4.U(conf.XLEN.W))
+  ))
+  alu.io.op := id.alu.aluOp
   val aluOut = alu.io.res
 
   //MEMORY MODULE CONNECTIONS
   val mask = Wire(UInt(conf.WMASKLEN.W))
   val wdata = Wire(UInt(conf.XLEN.W))
-  when(id.ctrl.memOp === Funct3.SB.U) {
+  when(id.alu.memOp === Funct3.SB.U) {
     mask := UIntToOH(aluOut(1,0))
     wdata := VecInit(Seq.fill(conf.WMASKLEN)(v2(7,0))).asUInt
-  } .elsewhen(id.ctrl.memOp === Funct3.SH.U) {
+  } .elsewhen(id.alu.memOp === Funct3.SH.U) {
     mask := Mux(aluOut(1), "b1100".U(4.W), "b0011".U(4.W))
     wdata := VecInit(Seq.fill(conf.WMASKLEN/2)(v2(15,0))).asUInt
   } .otherwise { //SW
@@ -95,35 +103,35 @@ class Execute(implicit conf: Config) extends PipelineStage {
   //Memory request information
   val req = Wire(new MemoryRequest)
   req.addr := aluOut(conf.XLEN-1,2) ## 0.U(2.W) //Must zero out 2 LSB of memory access to use wmask correctly
-  req.req := (id.ctrl.memWrite | id.ctrl.memRead) & id.valid
-  req.we := id.ctrl.memWrite
-  req.wmask := mask & Fill(conf.WMASKLEN, id.ctrl.memWrite)
+  req.req := (id.alu.memWrite | id.alu.memRead) & id.alu.valid
+  req.we := id.alu.memWrite
+  req.wmask := mask & Fill(conf.WMASKLEN, id.alu.memWrite)
   req.wdata := wdata
 
   //Old memory request, to keep constant in case it is not acknowledged after 1 CC
   val oldReq = RegNext(io.mem)
   io.mem := Mux(io.hzd.stall, oldReq, req)
-//  io.mem := req
 
   //OUTPUTS
   //JAL and JALR require that PC+4 is written to regfile.
   //AUIPC requires that we add imm to PC
   //LUI requires that we add imm to 0
-  io.memstage.res := Mux(id.ctrl.jump, id.pc + 4.U(conf.XLEN.W), aluOut)
-  io.memstage.rd := id.rd
-  io.memstage.valid := id.valid && !io.hzd.stall
+//  io.memstage.res := Mux(id.alu.jump, id.pc + 4.U(conf.XLEN.W), aluOut)
+  io.memstage.res := aluOut
+  io.memstage.rd := id.alu.rd
+  io.memstage.valid := id.alu.valid && !io.hzd.stall
 
   //Forward control signals to MEM stage
-  io.memstage.ctrl.we := id.ctrl.we
-  io.memstage.ctrl.memOp := id.ctrl.memOp
-  io.memstage.ctrl.memWrite := id.ctrl.memWrite
-  io.memstage.ctrl.memRead := id.ctrl.memRead
+  io.memstage.ctrl.we := id.alu.we
+  io.memstage.ctrl.memOp := id.alu.memOp
+  io.memstage.ctrl.memWrite := id.alu.memWrite
+  io.memstage.ctrl.memRead := id.alu.memRead
 
   //Control signals and hazard detection
   io.fetch.loadPC := loadPC
   io.fetch.newPC := newPC
 
-  io.hzd.rd := id.rd
-  io.hzd.memRead := id.ctrl.memRead
+  io.hzd.rd := id.alu.rd
+  io.hzd.memRead := id.alu.memRead
   io.hzd.loadPC := loadPC
 }

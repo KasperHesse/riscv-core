@@ -1,6 +1,7 @@
 package core
 
 import chisel3._
+import core.csr.CSRInputs
 
 class FetchDecodeIO(implicit conf: Config) extends Bundle {
   /** Instruction fetched from memory in IF */
@@ -24,48 +25,95 @@ class FetchControlIO(implicit conf: Config) extends Bundle {
   val stall = Input(Bool())
 }
 
+/**
+ * Outputs from the decoder used to decode RV32I-instructions
+ * @param conf
+ */
+class IDecodeOutputs(implicit conf: Config) extends Bundle {
+  // Outputs to decode stage //
+  /** Source register 1 */
+  val rs1 = UInt(5.W)
+  /** Source register 2 */
+  val rs2 = UInt(5.W)
+  /** Destination register */
+  val rd = UInt(5.W)
+  /** Opcode */
+  val aluOp = AluOp()
+  /** Decoded immediate */
+  val imm = UInt(conf.XLEN.W)
+  /** Instruction valid flag */
+  val valid = Bool()
+
+  //Outputs to control signals along the pipe
+  /** Branch flag */
+  val branch = Bool()
+  /** Branch operation to perform. From MSB to LSB: (bgeu, bltu, bge, blt, bne, beq) */
+  val branchOp = UInt(6.W)
+  /** JAL/JALR flag */
+  val jump = Bool()
+  /** Source of operand 1 to ALU. When CONST, set to 0 */
+  val op1Src = OpSrc()
+  /** Source of operand 2 to ALU. When CONST, set to 4 */
+  val op2Src = OpSrc()
+  /** Whether to add value in rs1 (1) or PC (0) to immediate when calculating new PC on jump/branch instructions */
+  val newPCsrc = Bool()
+  /** Memory read operation flag */
+  val memRead = Bool()
+  /** Memory write operation flag */
+  val memWrite = Bool()
+  /** Memory operation to perform. Direct copy of funct3-field from instruction */
+  val memOp = UInt(3.W)
+  /** Write-enable flag when instruction reaches WB stage */
+  val we = Bool()
+}
+
 /** IO-ports between Decode and Execute stage.
  * Instantiate as-is in Decode stage, use Flipped() in Execute stage */
 class DecodeExecuteIO(implicit conf: Config) extends Bundle {
-  /** Valid flag */
-  val valid = Output(Bool())
-  /** Immediate value encoded in the instruction if an IMM is used */
-  val imm = Output(UInt(conf.XLEN.W))
-  /** Value stored in register rs1 */
   val v1 = Output(UInt(conf.XLEN.W))
-  /** Value stored in register rs2 */
   val v2 = Output(UInt(conf.XLEN.W))
-  /** rs1-register, used for proper forwarding */
-  val rs1 = Output(UInt(5.W))
-  /** rs2-register, used for proper forwarding */
-  val rs2 = Output(UInt(5.W))
-  /** PC value of the current instruction, to be used when calculating branches */
   val pc = Output(UInt(conf.XLEN.W))
-  /** Register to write result into if instruction requires this */
-  val rd = Output(UInt(5.W))
-  /** Operation for the ALU to perform. In practice, is a concatenation of funct7[5] and funct3.
-   * The 3 LSB (funct3) also encode the branch comparison to be performed */
-  val aluOp = Output(AluOp())
-  /** Whether the value to add to the immediate when calculating branch/jump targets is the PC (0, JAL and branches),
-   * or value in rs1 (1, JALR) */
-  val pcNextSrc = Output(Bool())
-  /** Control values */
-  val ctrl = new Bundle {
-    /** Whether the second operand to ALU comes from immediate (0) or register file (1) */
-    val op2src = Output(Bool())
-    /** Flag indicating if this is a branch instruction that should be evaluated */
-    val branch = Output(Bool())
-    /** Flag indicating if this is an unconditional jump instruction that should be taken */
-    val jump = Output(Bool())
-    /** Flag indicating that a value should be fetched from memory and stored in rd */
-    val memRead = Output(Bool())
-    /** Flag indicating that the value in rs2 should be written to memory */
-    val memWrite = Output(Bool())
-    /** Type of memory operation to perform. Is the funct3-field from the instruction */
-    val memOp = Output(UInt(3.W))
-    /** Write-enable in the WB stage */
-    val we = Output(Bool())
-  }
+  val alu = Output(new IDecodeOutputs)
+  val csr = Output(new CSRInputs)
+//  /** Valid flag */
+//  val valid = Output(Bool())
+//  /** Immediate value encoded in the instruction if an IMM is used */
+//  val imm = Output(UInt(conf.XLEN.W))
+//  /** Value stored in register rs1 */
+//  val v1 = Output(UInt(conf.XLEN.W))
+//  /** Value stored in register rs2 */
+//  val v2 = Output(UInt(conf.XLEN.W))
+//  /** rs1-register, used for proper forwarding */
+//  val rs1 = Output(UInt(5.W))
+//  /** rs2-register, used for proper forwarding */
+//  val rs2 = Output(UInt(5.W))
+//  /** Register to write result into if instruction requires this */
+//  val rd = Output(UInt(5.W))
+//  /** PC value of the current instruction, to be used when calculating branches */
+//  val pc = Output(UInt(conf.XLEN.W))
+//  /** Operation for the ALU to perform. In practice, is a concatenation of funct7[5] and funct3.
+//   * The 3 LSB (funct3) also encode the branch comparison to be performed */
+//  val aluOp = Output(AluOp())
+//  /** Whether the value to add to the immediate when calculating branch/jump targets is the PC (0, JAL and branches),
+//   * or value in rs1 (1, JALR) */
+//  val pcNextSrc = Output(Bool())
+//  /** Control values */
+//  val ctrl = new Bundle {
+//    /** Whether the second operand to ALU comes from immediate (0) or register file (1) */
+//    val op2src = Output(Bool())
+//    /** Flag indicating if this is a branch instruction that should be evaluated */
+//    val branch = Output(Bool())
+//    /** Flag indicating if this is an unconditional jump instruction that should be taken */
+//    val jump = Output(Bool())
+//    /** Flag indicating that a value should be fetched from memory and stored in rd */
+//    val memRead = Output(Bool())
+//    /** Flag indicating that the value in rs2 should be written to memory */
+//    val memWrite = Output(Bool())
+//    /** Type of memory operation to perform. Is the funct3-field from the instruction */
+//    val memOp = Output(UInt(3.W))
+//    /** Write-enable in the WB stage */
+//    val we = Output(Bool())
+//  }
 }
 
 class ExecuteMemoryIO(implicit conf: Config) extends Bundle {

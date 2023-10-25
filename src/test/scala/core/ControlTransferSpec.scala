@@ -84,7 +84,7 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
     }
   }
 
-  it should "perform a JALR backward with immediate" in {
+  it should "perform a JALR backward" in {
     val asm =
       """
         |addi x6, x0, 28
@@ -148,7 +148,7 @@ class ControlTransferSpec extends AnyFlatSpec with ChiselScalatestTester with Ma
         |L2: nop
         |""".stripMargin
 
-    test(new Core) {dut =>
+    test(new Core).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
       val sh = SimulationHarness(dut, assembleMap(asm, this.getTestName))
       sh.run()
       expectReg(dut, 2, 15)
