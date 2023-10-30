@@ -10,7 +10,7 @@ class Memory(implicit conf: Config) extends PipelineStage {
     /** Inputs from EX stage */
     val ex = Flipped(new ExecuteMemoryIO)
     /** Outputs to WB stage */
-    val wb = new MemoryWritebackIO
+    val wb = Output(new WritebackInputs)
     /** Inputs from memory module */
     val mem = Input(new MemoryResponse)
     /** Outputs to forwarding module */
@@ -65,4 +65,5 @@ class Memory(implicit conf: Config) extends PipelineStage {
   //Control signals
   io.hzd.memOp := (ex.ctrl.memWrite || ex.ctrl.memRead) && ex.valid
   io.hzd.ack := io.mem.ack
+  io.hzd.valid := ex.valid
 }

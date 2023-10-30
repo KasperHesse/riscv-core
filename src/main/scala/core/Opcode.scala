@@ -5,13 +5,15 @@ import chisel3.ChiselEnum
 
 object Funct3 {
   val ZERO, ADDI, JALR, BEQ, LB, SB, ADD, SUB, FENCE, ECALL, EBREAK = 0
-  val BNE, LH, SH, SLLI, SLL = 1
-  val LW, SW, SLTI, SLT = 2
-  val SLTIU, SLTU = 3
+  val BNE, LH, SH, SLLI, SLL, CSRRW = 1
+  val LW, SW, SLTI, SLT, CSRRS = 2
+  val SLTIU, SLTU, CSRRC = 3
   val BLT, LBU, XORI, XOR = 4
-  val BGE, LHU, SRLI, SRAI, SRL, SRA = 5
-  val BLTU, ORI, OR = 6
-  val BGEU, ANDI, AND = 7
+  val BGE, LHU, SRLI, SRAI, SRL, SRA, CSRRWI = 5
+  val BLTU, ORI, OR, CSRRSI = 6
+  val BGEU, ANDI, AND, CSRRCI = 7
+
+
 }
 
 object Funct7 {

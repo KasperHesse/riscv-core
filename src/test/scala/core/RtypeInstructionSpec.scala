@@ -40,7 +40,7 @@ class RtypeInstructionSpec extends AnyFlatSpec with ChiselScalatestTester with M
 
   def regTestFun(funct7: Int, funct3: Int, op: (Int, Int) => Int) = {
     val inst = mutable.ListBuffer.empty[Instruction]
-    test(new Core()(defaultConf)) {dut =>
+    test(new Core()(defaultConf)).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
       loadFirst15(inst)
       operateLast15(funct7, funct3, inst)
       val r = computeResults(inst, op)
