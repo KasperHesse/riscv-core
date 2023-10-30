@@ -23,8 +23,14 @@ class ExecuteHazardIO extends Bundle {
 
 class MemoryHazardIO extends Bundle {
   val memOp = Output(Bool())
+  val valid = Output(Bool())
   val ack = Output(Bool())
   val stall = Input(Bool())
+}
+
+class CSRHazardIO extends Bundle {
+  val stall = Input(Bool())
+  val valid = Output(Bool())
 }
 /**
  * The [[HazardDetection]] unit is used to avoid data hazards when executing programs
@@ -35,15 +41,16 @@ class HazardDetection extends Module {
     val ID = Flipped(new DecodeHazardIO)
     val EX = Flipped(new ExecuteHazardIO)
     val MEM = Flipped(new MemoryHazardIO)
+    val CSR = Flipped(new CSRHazardIO)
   })
   //All outputs default to false
-
   io.IF.flush :=  false.B
   io.IF.stall :=  false.B
   io.ID.flush :=  false.B
   io.ID.stall :=  false.B
   io.EX.stall :=  false.B
   io.MEM.stall := false.B
+  io.CSR.stall := false.B
 
   //Delayed memory response
   //If a memory operation is not ACK'd on cycle after issuing it, IF, ID, EX and MEM stages must be stalled.
@@ -54,7 +61,6 @@ class HazardDetection extends Module {
     io.EX.stall := true.B
     io.MEM.stall := true.B
   }
-
 
   //Load-use hazard
   //Since we don't forward result from memory stage,
@@ -71,38 +77,17 @@ class HazardDetection extends Module {
     io.IF.flush := true.B
   }
 
-  //CSR instruction: When instruction in EX is a CSR, we stall IF, ID and EX until MEM, WB are invalid.
-  //
-
-  /*
-  HAZARD AVOIDANCE
-  Load-use: When EX.memRead && EX.rd == (ID.rs1 || ID.rs2) && EX.rd=!=0, stall IF and ID
-    ID (flush): Change all control signals to 0's (memread, memwrite etc). No need to overwrite remaining values
-    IF (stall): Don't update PC being accessed
-
-  Jump/branch: If a jump or branch is taken, flush IF/ID and ID/EX registers
-    ID/EX: Clear control signals
-    IF/ID: Clear output, fetch new PC
-
-  Delayed memory load/store: When LOAD or STORE operation is performed and not ACK'd on next CC
-    MEM: Stall
-    EX: Stall, keep outputs constant
-    ID: Stall
-    IF: Stall
-
-   Required inputs from environment:
-   Load-use:
-    - memRead
-    - EX.rd
-    - ID.rs1
-    - ID.rs2
-
-  Jump/branch:
-    - Jump signal
-
-  Delayed memory:
-    - mem.ack
-    - MEM.memRead, MEM.memWrite
-
-   */
+  //CSR instruction: When CSR instruction, we stall IF and ID until MEM, WB are invalid.
+  //No inputs from WB, so we use RegNext of mem.valid instead
+  when(io.CSR.valid && (io.MEM.valid || RegNext(io.MEM.valid))) {
+    io.IF.stall := true.B
+    io.ID.stall := true.B
+    io.CSR.stall := true.B
+  }
+  //No forwarding from CSR pipe, so we need to stall one additional CC after executing instruction,
+  //such that potential forwarding from WB to EX can happen
+  when(RegNext(io.CSR.valid)) {
+    io.IF.stall := true.B
+    io.ID.stall := true.B
+  }
 }

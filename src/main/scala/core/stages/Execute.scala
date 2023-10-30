@@ -3,6 +3,7 @@ package core.stages
 import chisel3._
 import chisel3.util._
 import core._
+import core.csr.CSR
 import core.modules.{ALU, ExecuteHazardIO, ForwardingUnit}
 
 class Execute(implicit conf: Config) extends PipelineStage {

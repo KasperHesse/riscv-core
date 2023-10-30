@@ -1,7 +1,8 @@
 package core
 
 import chisel3._
-import core.modules.HazardDetection
+import core.csr.CSR
+import core.modules.{ForwardingUnit, HazardDetection}
 import core.stages.{Decode, Execute, Fetch, Memory, Writeback}
 
 class Core(implicit conf: Config) extends Module {
@@ -18,32 +19,48 @@ class Core(implicit conf: Config) extends Module {
   val execute = Module(new Execute)
   val memory = Module(new Memory)
   val writeback = Module(new Writeback)
+
+  val csr = Module(new CSR)
   val hazard = Module(new HazardDetection)
 
-  //Pipeline connections
+  //PIPELINE CONNECTIONS
   fetch.io.id <> decode.io.fetch
   decode.io.ex <> execute.io.id
   execute.io.memstage <> memory.io.ex
-  memory.io.wb <> writeback.io.mem
+  csr.io.in <> decode.io.csr
+  csr.io.fwd <> writeback.io.out
+
+  writeback.io.mem <> memory.io.wb
+  writeback.io.csr <> csr.io.out
   writeback.io.out <> decode.io.wb
 
-  //Forwarding connections
+  //FORWARDING CONNECTIONS
   execute.io.memFwd := memory.io.fwd
   execute.io.wbFwd := writeback.io.out
 
-  //Memory connections
+  //MEMORY CONNECTIONS
   io.imem <> fetch.io.mem
   io.dmem.req <> execute.io.mem
   io.dmem.resp <> memory.io.mem
 
-  //Control signals and hazard detection
+  //CONTROL SIGNALS
   fetch.io.ctrl.loadPC := execute.io.fetch.loadPC
   fetch.io.ctrl.newPC := execute.io.fetch.newPC
 
-  fetch.io.hzd <> hazard.io.IF
-  decode.io.hzd <> hazard.io.ID
-  execute.io.hzd <> hazard.io.EX
-  memory.io.hzd <> hazard.io.MEM
+  //HAZARD MODULE CONNECTIONS
+  hazard.io.IF <> fetch.io.hzd
+  hazard.io.ID <> decode.io.hzd
+  hazard.io.EX <> execute.io.hzd
+  hazard.io.MEM <> memory.io.hzd
+  hazard.io.CSR <> csr.io.hzd
+
+  //CSR TRIGGERS
+  csr.io.triggers.instret := writeback.io.instret
+  csr.io.triggers.NX := false.B
+  csr.io.triggers.UF := false.B
+  csr.io.triggers.OF := false.B
+  csr.io.triggers.NV := false.B
+  csr.io.triggers.DVZ := false.B
 
 
   if(conf.debug) {

@@ -3,6 +3,7 @@ package core.csr
 import chisel3._
 import chisel3.util._
 import core._
+import core.modules.CSRHazardIO
 
 /**
  * Control and status-register module. Contains all CSR's and handles CSR read/write operations,
@@ -16,31 +17,36 @@ class CSR(implicit conf: Config) extends Module {
     val triggers = Input(new CSRTriggers())
     /** Inputs from pipeline for reading/writing CSRs */
     val in = Input(new CSRInputs)
+    /** Inputs and outputs to/from hazard detection module */
+    val hzd = new CSRHazardIO
     /** Output from pipeline for reading/writing CSRs */
-    val out = Output(new CSROutputs)
+    val out = Output(new WritebackInputs)
+    /** Input from WB forwarding port */
+    val fwd = Input(new ForwardingPort)
   })
 
-  /*
-  SWAP: Write value from imm into CSR. Read CSR and output
-  READSET: Value in 'imm' is used to set bits of register high
-  READCLEAR: Value in 'imm' is used to set bits of register low
-
-  Example reg: `fcsr` actually consists of multiple register
-  - fflags: lower 5 bits
-  - frm: Rounding mode, 3 bits
-  - fcsr: Floating point control and status (frm + fflags)
-
-  Keep one underlying register for fcsr. fflags and frm shadow values stored in that register
-   */
+  /*===================================
+   * INPUT PIPELINE REGISTER
+   *=================================*/
+  val in = RegInit(0.U(io.in.getWidth.W).asTypeOf(io.in))
+  when(!io.hzd.stall) {
+    in := io.in
+  }
+  //Handle forwarding while stalled waiting for pipe to empty
+  when(io.fwd.we && io.fwd.rd === in.rs1) {
+    in.rs1Val := io.fwd.wdata
+  }
+  //TODO: Handle forwarding?
 
   /*===================================
   * GENERAL DEFINITIONS
   *=================================*/
+  val mask = Mux(in.useImm, in.imm, in.rs1Val)
   val csrRdata = Wire(UInt(conf.XLEN.W))
   val csrWdata = Wire(UInt(conf.XLEN.W))
 
-  val doCsrRead = !(io.in.op === CSROP.SWAP && io.in.rd === 0.U)
-  val doCsrWrite = (io.in.op === CSROP.SWAP || (io.in.rs1 =/= 0.U))  //This indirectly also checks the value of uimm
+  val doCsrRead = !(in.op === CSROP.SWAP && in.rd === 0.U)
+  val doCsrWrite = (in.op === CSROP.SWAP || (in.rs1 =/= 0.U))  //This indirectly also checks the value of uimm
   val csrEn = Seq(
     CSRMap.fcsr,
     CSRMap.frm,
@@ -52,7 +58,7 @@ class CSR(implicit conf: Config) extends Module {
     CSRMap.instreth,
     CSRMap.cycleh
   ).map(
-    x => (x, x.U(12.W) === io.in.csrReg && io.in.valid)
+    x => (x, x.U(12.W) === in.csrReg && in.valid)
   ).toMap
   val csrRe = csrEn.map{case (csr, en) => (csr, en && doCsrRead)}
   val csrWe = csrEn.map{case (csr, en) => (csr, en && doCsrWrite)}
@@ -63,21 +69,17 @@ class CSR(implicit conf: Config) extends Module {
 
   /* Instructions retired, INSTRET and INSTRETH */
   val instret = RegInit(0.U(32.W))
-  instret := MuxCase(instret, Seq(
-    (csrWe(CSRMap.instret), csrWdata),
-    (io.triggers.instret, instret + 1.U)
-  ))
+  instret := Mux(io.triggers.instret, instret + 1.U, instret)
 
   val instreth = RegInit(0.U(32.W))
-  instreth := MuxCase(instreth, Seq(
-    (csrWe(CSRMap.instreth), csrWdata),
-    //only update instreth when not explicitly writing instret, instret is being updated and it is maxed out
-    (!csrWe(CSRMap.instret) && io.triggers.instret && instret.andR, instreth + 1.U)
-  ))
+  instreth := Mux(instret.andR, instreth + 1.U, instret)
 
-  /* Clock cycles elapsed, CYCLE */
+  /* Clock cycles elapsed, CYCLE and CYCLEH */
   val cycle = RegInit(0.U(32.W))
-  cycle := Mux(csrWe(CSRMap.cycle), csrWdata, cycle + 1.U)
+  cycle := cycle + 1.U
+
+  val cycleh = RegInit(0.U(32.W))
+  cycleh := Mux(cycle.andR, cycleh + 1.U, cycleh)
 
   /*===================================
    * FLOATING POINT CSR'S
@@ -87,10 +89,17 @@ class CSR(implicit conf: Config) extends Module {
   val fflags = 0.U((conf.XLEN - 5).W) ## fcsrReg(4,0) //fflags is fcsr(4,0)
   val frm = 0.U((conf.XLEN - 3).W) ## fcsrReg(7,5)    //frm is fcsr(7,5)
 
-  fcsrReg := MuxCase(fcsrReg, Seq(
+  //Updated value of fflags with accrued exceptions
+  val fflagsNew = (fflags(4) | io.triggers.NV) ##
+    (fflags(3) | io.triggers.DVZ) ##
+    (fflags(2) | io.triggers.OF) ##
+    (fflags(1) | io.triggers.UF) ##
+    (fflags(0) | io.triggers.NX)
+
+  fcsrReg := MuxCase(fcsrReg(7,5) ## fflagsNew, Seq(
     (csrWe(CSRMap.fcsr), csrWdata(7,0)),
     (csrWe(CSRMap.fflags), fcsrReg(7,5) ## csrWdata(4,0)),
-    (csrWe(CSRMap.frm), csrWdata(2,0) ## fcsrReg(4,0))
+    (csrWe(CSRMap.frm), csrWdata(2,0) ## fflagsNew)
   ))
 
   /*===================================
@@ -98,24 +107,27 @@ class CSR(implicit conf: Config) extends Module {
    *=================================*/
 
   //CSR read data
-  csrRdata := MuxLookup(io.in.csrReg, fflags)(Seq(
+  csrRdata := MuxLookup(in.csrReg, fflags)(Seq(
     (CSRMap.fflags.U, fflags),
     (CSRMap.frm.U, frm),
     (CSRMap.fcsr.U, fcsr),
     (CSRMap.instret.U, instret),
-    (CSRMap.instreth.U, instreth)
+    (CSRMap.instreth.U, instreth),
+    (CSRMap.cycle.U, cycle),
+    (CSRMap.cycleh.U, cycleh)
   ))
 
-  csrWdata := MuxLookup(io.in.op, csrRdata)(Seq(
-    (CSROP.SWAP, io.in.mask),
-    (CSROP.READSET, csrRdata | io.in.mask),
-    (CSROP.READCLEAR, csrRdata & (~io.in.mask).asUInt)
+  csrWdata := MuxLookup(in.op, csrRdata)(Seq(
+    (CSROP.SWAP, mask),
+    (CSROP.READSET, csrRdata | mask),
+    (CSROP.READCLEAR, csrRdata & (~mask).asUInt)
   ))
 
-  io.out.csrRead := RegNext(csrRdata)
-  io.out.rd := RegNext(io.in.rd)
-  io.out.valid := RegNext(io.in.valid)
-  io.out.we := RegNext(doCsrRead && io.in.valid) //Only write a value into GPR if a read was performed
+  io.out.res := csrRdata
+  io.out.rd := in.rd
+  io.out.valid := in.valid && !io.hzd.stall
+  io.out.we := doCsrRead && in.valid && !io.hzd.stall //Only write a value into GPR if a read was performed
+  io.hzd.valid := in.valid
 }
 
 object CSR extends App {
@@ -127,6 +139,7 @@ object CSRMap {
   val frm = 0x002
   val fcsr = 0x003
 
+  //TODO: These csrs should not be writeable, only readable
   val cycle = 0xc00
   val time = 0xc01
   val instret = 0xc02

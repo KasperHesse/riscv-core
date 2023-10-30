@@ -19,7 +19,10 @@ A generic RV32I core, that should later be parameterized to also support RV64 an
     - Pro: Shorter combinational paths
     - Con: Additional logic for skid buffers required
 
-
+# Optimizations
+- [ ] Move pipeline registers to end-of-stage instead of start-of-stage
+  - Will probably make a lot of things easier
+  - Example: Shared forwarding logic between CSR pipe and EX pipe
 ## Idea for implementation
 - No need to compute address offsets or similar
 - Simplify logic: CSR instructions must exist in a flushed pipeline. When a CSR instruction is decoded

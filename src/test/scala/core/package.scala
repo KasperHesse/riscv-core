@@ -1,5 +1,7 @@
 import chisel3._
 import chiseltest._
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.must.Matchers
 
 import java.io.{BufferedWriter, File, FileInputStream, FileWriter}
 import scala.collection.mutable
@@ -8,6 +10,8 @@ import scala.sys.process._
 import scala.util.Random
 
 package object core {
+
+  class MyTestFixture extends AnyFlatSpec with ChiselScalatestTester with Matchers
 
   val defaultConf = Config(debug=true)
 

@@ -3,7 +3,7 @@ package core.stages
 import chisel3._
 import chisel3.util._
 import core._
-import core.csr.CSRDecode
+import core.csr.{CSRDecode, CSRInputs}
 import core.modules.{DecodeHazardIO, IDecode}
 
 /**
@@ -16,6 +16,7 @@ class Decode(implicit conf: Config) extends PipelineStage {
   val io = IO(new Bundle {
     val fetch = Flipped(new FetchDecodeIO)
     val ex = new DecodeExecuteIO
+    val csr = Output(new CSRInputs)
     val wb = Input(new ForwardingPort)
     val hzd = new DecodeHazardIO
     val dbg = if(!conf.debug) None else Some(new Bundle {
@@ -33,10 +34,10 @@ class Decode(implicit conf: Config) extends PipelineStage {
   Idecode.io.instr := instr
   CSRdecode.io.instr := instr
 
-
   val rs1 = WireDefault(Idecode.io.out.rs1)
   val rs2 = WireDefault(Idecode.io.out.rs2)
   val rd = WireDefault(Idecode.io.out.rd)
+  //Override register-selects when CSRDecode is valid
   when(CSRdecode.io.out.valid) {
     rs1 := CSRdecode.io.out.rs1
     rd := CSRdecode.io.out.rd
@@ -63,14 +64,13 @@ class Decode(implicit conf: Config) extends PipelineStage {
 
   //Outputs
   io.ex.alu := Idecode.io.out
-  io.ex.csr := CSRdecode.io.out
   io.ex.v1 := v1
   io.ex.v2 := v2
   io.ex.pc := fetch.pc
 
-  when(!CSRdecode.io.useImm) {
-    io.ex.csr.mask := v1
-  }
+  io.csr := CSRdecode.io.out
+  io.csr.rs1Val := v1
+
   //When invalidated, take all control signals low
   when(!valid) {
     //ALU control signals
@@ -82,7 +82,7 @@ class Decode(implicit conf: Config) extends PipelineStage {
     io.ex.alu.we := false.B
 
     //CSR control signals
-    io.ex.csr.valid := false.B
+    io.csr.valid := false.B
   }
 
   io.hzd.rs1 := rs1
