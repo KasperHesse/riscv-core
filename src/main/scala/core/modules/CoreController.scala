@@ -94,7 +94,7 @@ class CoreController extends Module {
   //No forwarding from CSR pipe, so we need to stall one additional CC after executing instruction,
   //such that potential forwarding from WB to EX can happen
   when(RegNext(io.CSR.valid)) {
-    io.IF.stall := ttrue.B
+    io.IF.stall := true.B
     io.ID.stall := true.B
   }
 }
