@@ -3,7 +3,7 @@ package core.csr
 import chisel3._
 import chisel3.util._
 import core._
-import core.modules.CSRHazardIO
+import core.modules.CSRControllerIO
 
 /**
  * Control and status-register module. Contains all CSR's and handles CSR read/write operations,
@@ -18,7 +18,7 @@ class CSR(implicit conf: Config) extends Module {
     /** Inputs from pipeline for reading/writing CSRs */
     val in = Input(new CSRInputs)
     /** Inputs and outputs to/from hazard detection module */
-    val hzd = new CSRHazardIO
+    val hzd = new CSRControllerIO
     /** Output from pipeline for reading/writing CSRs */
     val out = Output(new WritebackInputs)
     /** Input from WB forwarding port */

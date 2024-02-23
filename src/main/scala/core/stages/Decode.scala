@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import core._
 import core.csr.{CSRDecode, CSRInputs}
-import core.modules.{DecodeHazardIO, IDecode}
+import core.modules.{DecodeControllerIO, IDecode}
 
 /**
  * The Decode stage of the Risc-V processor. Contains the register file and immediate generation logic
@@ -18,7 +18,7 @@ class Decode(implicit conf: Config) extends PipelineStage {
     val ex = new DecodeExecuteIO
     val csr = Output(new CSRInputs)
     val wb = Input(new ForwardingPort)
-    val hzd = new DecodeHazardIO
+    val hzd = new DecodeControllerIO
     val dbg = if(!conf.debug) None else Some(new Bundle {
       val reg = Output(Vec(32, UInt(conf.XLEN.W)))
     })

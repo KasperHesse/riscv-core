@@ -2,7 +2,7 @@ package core
 
 import chisel3._
 import core.csr.CSR
-import core.modules.{ForwardingUnit, HazardDetection}
+import core.modules.{ForwardingUnit, CoreController}
 import core.stages.{Decode, Execute, Fetch, Memory, Writeback}
 
 class Core(implicit conf: Config) extends Module {
@@ -21,7 +21,7 @@ class Core(implicit conf: Config) extends Module {
   val writeback = Module(new Writeback)
 
   val csr = Module(new CSR)
-  val hazard = Module(new HazardDetection)
+  val hazard = Module(new CoreController)
 
   //PIPELINE CONNECTIONS
   fetch.io.id <> decode.io.fetch

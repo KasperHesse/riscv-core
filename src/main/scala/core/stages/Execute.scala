@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import core._
 import core.csr.CSR
-import core.modules.{ALU, ExecuteHazardIO, ForwardingUnit}
+import core.modules.{ALU, ExecuteControllerIO, ForwardingUnit}
 
 class Execute(implicit conf: Config) extends PipelineStage {
   val io = IO(new Bundle {
@@ -24,7 +24,7 @@ class Execute(implicit conf: Config) extends PipelineStage {
       val newPC = Output(UInt(conf.XLEN.W))
     }
     /** Connections to hazard detection module */
-    val hzd = new ExecuteHazardIO
+    val hzd = new ExecuteControllerIO
   })
 
   //MODULES

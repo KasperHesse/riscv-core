@@ -3,7 +3,7 @@ package core.stages
 import chisel3._
 import chisel3.util._
 import core._
-import core.modules.FetchHazardIO
+import core.modules.FetchControllerIO
 import utils._
 
 class Fetch(implicit conf: Config) extends PipelineStage {
@@ -14,7 +14,7 @@ class Fetch(implicit conf: Config) extends PipelineStage {
       val loadPC = Input(Bool())
       val newPC = Input(UInt(conf.XLEN.W))
     }
-    val hzd = new FetchHazardIO
+    val hzd = new FetchControllerIO
   })
   //Flag pulled high when PC value should be updated
   val updatePC = Wire(Bool())

@@ -2,47 +2,52 @@ package core.modules
 
 import chisel3._
 
-class FetchHazardIO extends Bundle {
+class FetchControllerIO extends Bundle {
   val flush = Input(Bool())
   val stall = Input(Bool())
 }
 
-class DecodeHazardIO extends Bundle {
+class DecodeControllerIO extends Bundle {
   val rs1 = Output(UInt(5.W))
   val rs2 = Output(UInt(5.W))
   val flush = Input(Bool())
   val stall = Input(Bool())
 }
 
-class ExecuteHazardIO extends Bundle {
+class ExecuteControllerIO extends Bundle {
   val memRead = Output(Bool())
   val rd = Output(UInt(5.W))
   val loadPC = Output(Bool())
   val stall = Input(Bool())
 }
 
-class MemoryHazardIO extends Bundle {
+class MemoryControllerIO extends Bundle {
   val memOp = Output(Bool())
   val valid = Output(Bool())
   val ack = Output(Bool())
   val stall = Input(Bool())
 }
 
-class CSRHazardIO extends Bundle {
+class CSRControllerIO extends Bundle {
   val stall = Input(Bool())
   val valid = Output(Bool())
 }
 /**
- * The [[HazardDetection]] unit is used to avoid data hazards when executing programs
+ * The [[CoreController]] unit is used for controlling the core when executing.
+ * It avoids data hazards and controls branch / jump logic
  */
-class HazardDetection extends Module {
+class CoreController extends Module {
   val io = IO(new Bundle {
-    val IF = Flipped(new FetchHazardIO)
-    val ID = Flipped(new DecodeHazardIO)
-    val EX = Flipped(new ExecuteHazardIO)
-    val MEM = Flipped(new MemoryHazardIO)
-    val CSR = Flipped(new CSRHazardIO)
+    val IF = Flipped(new FetchControllerIO)
+    val ID = Flipped(new DecodeControllerIO)
+    val EX = Flipped(new ExecuteControllerIO)
+    val MEM = Flipped(new MemoryControllerIO)
+    val CSR = Flipped(new CSRControllerIO)
   })
+  ////////////////////
+  //HAZARD AVOIDANCE//
+  ////////////////////
+
   //All outputs default to false
   io.IF.flush :=  false.B
   io.IF.stall :=  false.B
@@ -79,15 +84,17 @@ class HazardDetection extends Module {
 
   //CSR instruction: When CSR instruction, we stall IF and ID until MEM, WB are invalid.
   //No inputs from WB, so we use RegNext of mem.valid instead
+  //No need to stall EX as it, by definition, invalid when CSR is valid
   when(io.CSR.valid && (io.MEM.valid || RegNext(io.MEM.valid))) {
     io.IF.stall := true.B
     io.ID.stall := true.B
     io.CSR.stall := true.B
   }
+
   //No forwarding from CSR pipe, so we need to stall one additional CC after executing instruction,
   //such that potential forwarding from WB to EX can happen
   when(RegNext(io.CSR.valid)) {
-    io.IF.stall := true.B
+    io.IF.stall := ttrue.B
     io.ID.stall := true.B
   }
 }

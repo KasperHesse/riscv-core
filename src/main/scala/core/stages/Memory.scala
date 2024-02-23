@@ -3,7 +3,7 @@ package core.stages
 import chisel3._
 import chisel3.util.{Fill, RegEnable, is, switch}
 import core._
-import core.modules.MemoryHazardIO
+import core.modules.MemoryControllerIO
 
 class Memory(implicit conf: Config) extends PipelineStage {
   val io = IO(new Bundle {
@@ -16,7 +16,7 @@ class Memory(implicit conf: Config) extends PipelineStage {
     /** Outputs to forwarding module */
     val fwd = Output(new ForwardingPort())
     /** Connections to hazard detection module */
-    val hzd = new MemoryHazardIO
+    val hzd = new MemoryControllerIO
   })
 
   /** Pipeline register */
